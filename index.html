@@ -29,6 +29,8 @@
             box-shadow: 0 20px 60px rgba(0,0,0,0.3);
             max-width: 500px;
             width: 100%;
+            position: relative;
+            z-index: 1;
         }
         
         .app-icon {
@@ -143,6 +145,106 @@
             color: #666;
         }
         
+        /* 弹窗样式 - 居中显示 */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 10000;
+            animation: fadeIn 0.3s ease;
+        }
+        
+        .modal-content {
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            max-width: 400px;
+            width: 90%;
+            text-align: center;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            animation: slideUp 0.3s ease;
+        }
+        
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .modal-icon {
+            width: 80px;
+            height: 80px;
+            margin: 0 auto 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 40px;
+        }
+        
+        .modal-title {
+            color: #333;
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        
+        .modal-text {
+            color: #666;
+            margin-bottom: 25px;
+            line-height: 1.5;
+        }
+        
+        .modal-buttons {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+        }
+        
+        .modal-btn {
+            flex: 1;
+            padding: 15px;
+            border-radius: 15px;
+            font-weight: bold;
+            font-size: 16px;
+            cursor: pointer;
+            border: none;
+            transition: all 0.3s;
+        }
+        
+        .modal-btn-primary {
+            background: #3DDC84;
+            color: white;
+        }
+        
+        .modal-btn-primary:hover {
+            background: #2BB673;
+            transform: translateY(-2px);
+        }
+        
+        .modal-btn-secondary {
+            background: #f8f9fa;
+            color: #666;
+            border: 2px solid #e9ecef;
+        }
+        
+        .modal-btn-secondary:hover {
+            background: #f1f3f5;
+        }
+        
         .debug {
             position: fixed;
             top: 10px;
@@ -154,18 +256,6 @@
             font-size: 12px;
             font-family: monospace;
             z-index: 1000;
-        }
-        
-        /* 透明覆盖层 - 用于自动点击 */
-        .auto-click-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: transparent;
-            z-index: 99999;
-            cursor: pointer;
         }
     </style>
 </head>
@@ -179,7 +269,7 @@
             <div class="loading" id="loading">
                 <div class="spinner"></div>
                 <div class="countdown" id="countdown">2</div>
-                <p id="statusText">正在尝试打开本地应用...</p>
+                <p id="statusText">正在检测本地应用...</p>
                 <div class="progress-bar">
                     <div class="progress-fill"></div>
                 </div>
@@ -193,15 +283,27 @@
         </div>
         
         <div class="tips">
-            <p>💡 2秒内尝试打开本地应用，失败后自动跳转应用商店</p>
+            <p>💡 正在检测本地应用，2秒后如未安装将跳转应用商店</p>
+        </div>
+    </div>
+
+    <!-- 弹窗 - 居中显示 -->
+    <div class="modal-overlay" id="modalOverlay">
+        <div class="modal-content">
+            <div class="modal-icon">📱</div>
+            <h2 class="modal-title">打开 Sand Blast</h2>
+            <p class="modal-text">检测到您已安装游戏，是否立即打开？</p>
+            <div class="modal-buttons">
+                <button class="modal-btn modal-btn-secondary" id="modalCancel">取消</button>
+                <button class="modal-btn modal-btn-primary" id="modalOpen">立即打开</button>
+            </div>
         </div>
     </div>
 
     <div class="debug" id="debugPanel" style="display: none;">
         <div>状态: <span id="debugState">-</span></div>
         <div>时间: <span id="debugTime">0</span>ms</div>
-        <div>尝试: <span id="debugAttempt">0</span></div>
-        <div>方式: <span id="debugMethod">-</span></div>
+        <div>阶段: <span id="debugPhase">-</span></div>
     </div>
 
     <script>
@@ -221,12 +323,13 @@
                 this.isAndroid = /Android/i.test(navigator.userAgent);
                 
                 this.state = {
+                    phase: 'init',          // init -> checking -> modal -> launching -> timeout/success
                     appOpened: false,
                     startTime: null,
                     timer: null,
                     countdownInterval: null,
-                    launchAttempts: 0,
-                    currentMethod: 'none',
+                    modalShown: false,      // 弹窗是否已显示
+                    userResponded: false,   // 用户是否已响应
                     initialPageHidden: document.hidden
                 };
                 
@@ -237,34 +340,82 @@
                     statusText: document.getElementById('statusText'),
                     timerInfo: document.getElementById('timerInfo'),
                     storeBtn: document.getElementById('storeBtn'),
+                    modalOverlay: document.getElementById('modalOverlay'),
+                    modalCancel: document.getElementById('modalCancel'),
+                    modalOpen: document.getElementById('modalOpen'),
                     debugPanel: document.getElementById('debugPanel'),
                     debugState: document.getElementById('debugState'),
                     debugTime: document.getElementById('debugTime'),
-                    debugAttempt: document.getElementById('debugAttempt'),
-                    debugMethod: document.getElementById('debugMethod')
+                    debugPhase: document.getElementById('debugPhase')
                 };
                 
                 if (this.config.debug) {
                     this.elements.debugPanel.style.display = 'block';
                 }
                 
-                console.log('=== 自动拉起应用 ===');
-                console.log('包名:', this.config.packageName);
-                console.log('Scheme:', this.config.urlScheme);
+                this.log('初始化完成');
+                this.updateDebugInfo();
+                
+                // 绑定弹窗事件
+                this.bindModalEvents();
             }
             
             log(message) {
                 if (this.config.debug) {
                     console.log(`[${Date.now()}] ${message}`);
-                    this.updateDebugInfo();
                 }
             }
             
             updateDebugInfo() {
                 this.elements.debugState.textContent = this.state.appOpened ? '已打开' : '未打开';
                 this.elements.debugTime.textContent = this.state.startTime ? Date.now() - this.state.startTime : 0;
-                this.elements.debugAttempt.textContent = this.state.launchAttempts;
-                this.elements.debugMethod.textContent = this.state.currentMethod;
+                this.elements.debugPhase.textContent = this.state.phase;
+            }
+            
+            // 绑定弹窗事件
+            bindModalEvents() {
+                // 打开应用按钮
+                this.elements.modalOpen.addEventListener('click', () => {
+                    this.log('用户点击"立即打开"');
+                    this.state.userResponded = true;
+                    this.hideModal();
+                    this.launchApp();
+                });
+                
+                // 取消按钮
+                this.elements.modalCancel.addEventListener('click', () => {
+                    this.log('用户点击"取消"');
+                    this.state.userResponded = true;
+                    this.hideModal();
+                    this.onUserCancelled();
+                });
+                
+                // 点击遮罩层关闭
+                this.elements.modalOverlay.addEventListener('click', (e) => {
+                    if (e.target === this.elements.modalOverlay) {
+                        this.log('用户点击遮罩层关闭');
+                        this.state.userResponded = true;
+                        this.hideModal();
+                        this.onUserCancelled();
+                    }
+                });
+            }
+            
+            // 显示弹窗（居中）
+            showModal() {
+                if (this.state.modalShown) return;
+                
+                this.log('显示弹窗');
+                this.state.modalShown = true;
+                this.state.phase = 'modal';
+                this.elements.modalOverlay.style.display = 'flex';
+                this.updateDebugInfo();
+            }
+            
+            // 隐藏弹窗
+            hideModal() {
+                this.log('隐藏弹窗');
+                this.elements.modalOverlay.style.display = 'none';
             }
             
             // 构建Scheme URL
@@ -279,24 +430,6 @@
                 }
             }
             
-            // 构建Intent URL
-            buildIntentUrl() {
-                const params = new URLSearchParams(window.location.search);
-                const ref = params.get('ref');
-                
-                let url = `intent://launch`;
-                if (ref) {
-                    url += `?ref=${encodeURIComponent(ref)}`;
-                }
-                url += `#Intent;` +
-                      `scheme=${this.config.urlScheme};` +
-                      `package=${this.config.packageName};` +
-                      `S.browser_fallback_url=${encodeURIComponent(this.config.playStoreUrl)};` +
-                      `end`;
-                
-                return url;
-            }
-            
             // 开始流程
             start() {
                 if (!this.isAndroid) {
@@ -304,11 +437,9 @@
                     return;
                 }
                 
-                this.log('开始自动拉起流程');
+                this.log('开始检测流程');
+                this.state.phase = 'checking';
                 this.state.startTime = Date.now();
-                
-                // 设置监听器
-                this.setupListener();
                 
                 // 开始倒计时
                 this.startCountdown();
@@ -318,8 +449,10 @@
                     this.handleTimeout();
                 }, this.config.timeout);
                 
-                // 立即开始自动拉起
-                this.autoLaunchApp();
+                // 先尝试静默检测（iframe方式）
+                this.silentCheckApp();
+                
+                this.updateDebugInfo();
             }
             
             // 开始倒计时
@@ -331,7 +464,6 @@
                     
                     this.elements.countdown.textContent = Math.ceil(remaining / 1000);
                     this.elements.timerInfo.textContent = `等待: ${secondsElapsed}秒`;
-                    this.updateDebugInfo();
                     
                     if (elapsed >= this.config.timeout) {
                         clearInterval(this.state.countdownInterval);
@@ -339,76 +471,33 @@
                 }, 100);
             }
             
-            // 设置监听器
-            setupListener() {
-                this.log('设置页面状态监听器');
+            // 【关键】静默检测应用是否安装
+            silentCheckApp() {
+                this.log('开始静默检测应用');
                 
-                const checkAppOpened = () => {
-                    if (document.hidden && !this.state.appOpened) {
-                        const elapsed = Date.now() - this.state.startTime;
-                        this.log(`页面隐藏检测 (开始后${elapsed}ms)`);
-                        
-                        if (elapsed > 100) {
-                            this.markAppOpened('页面隐藏');
-                        }
-                    }
-                };
-                
-                document.addEventListener('visibilitychange', checkAppOpened);
-            }
-            
-            // 【关键】自动拉起应用 - 多种自动方式
-            autoLaunchApp() {
-                this.log('开始自动拉起尝试');
-                
-                // 策略1：立即尝试iframe方式（不需要用户交互）
-                this.tryIframeMethod();
-                
-                // 策略2：创建透明层并自动点击（100ms后）
-                setTimeout(() => {
-                    if (!this.state.appOpened) {
-                        this.tryAutoClickMethod();
-                    }
-                }, 100);
-                
-                // 策略3：直接跳转（200ms后）
-                setTimeout(() => {
-                    if (!this.state.appOpened) {
-                        this.tryDirectMethod();
-                    }
-                }, 200);
-                
-                // 策略4：模拟用户交互（300ms后）
-                setTimeout(() => {
-                    if (!this.state.appOpened) {
-                        this.trySimulatedInteraction();
-                    }
-                }, 300);
-                
-                // 策略5：最后尝试（400ms后）
-                setTimeout(() => {
-                    if (!this.state.appOpened) {
-                        this.tryFinalMethod();
-                    }
-                }, 400);
-            }
-            
-            // 策略1：iframe方式（最可靠，不需要用户交互）
-            tryIframeMethod() {
-                this.state.launchAttempts++;
-                this.state.currentMethod = 'iframe';
-                this.log('尝试iframe方式');
-                
+                // 使用iframe方式检测（不会触发弹窗）
                 try {
-                    const intentUrl = this.buildIntentUrl();
+                    const intentUrl = `intent://check/#Intent;` +
+                                    `scheme=${this.config.urlScheme};` +
+                                    `package=${this.config.packageName};` +
+                                    `S.browser_fallback_url=about:blank;` +
+                                    `end`;
                     
-                    // 创建隐藏的iframe
                     const iframe = document.createElement('iframe');
                     iframe.style.cssText = 'display:none;width:1px;height:1px;border:none;opacity:0;';
                     iframe.src = intentUrl;
                     document.body.appendChild(iframe);
                     
-                    // 3秒后移除
+                    // 监听iframe加载完成
+                    iframe.onload = () => {
+                        this.log('iframe加载完成，应用可能已安装');
+                        // 如果iframe成功加载（没有跳转到fallback），说明应用已安装
+                        setTimeout(() => {
+                            this.onAppDetected();
+                        }, 100);
+                    };
+                    
+                    // 3秒后清理
                     setTimeout(() => {
                         if (iframe.parentNode) {
                             iframe.parentNode.removeChild(iframe);
@@ -416,167 +505,136 @@
                     }, 3000);
                     
                 } catch (error) {
-                    this.log('iframe方式失败: ' + error);
+                    this.log('静默检测失败: ' + error);
+                    // 检测失败，继续等待超时
                 }
+                
+                // 设置页面状态监听
+                this.setupListener();
             }
             
-            // 策略2：自动点击透明层
-            tryAutoClickMethod() {
-                if (this.state.appOpened) return;
-                
-                this.state.launchAttempts++;
-                this.state.currentMethod = 'auto-click';
-                this.log('尝试自动点击方式');
-                
-                try {
-                    // 创建全屏透明层
-                    const overlay = document.createElement('div');
-                    overlay.className = 'auto-click-overlay';
-                    overlay.id = 'autoClickOverlay';
-                    
-                    // 设置点击事件
-                    overlay.onclick = () => {
-                        this.log('自动点击触发');
-                        const schemeUrl = this.buildSchemeUrl();
-                        window.location.href = schemeUrl;
-                    };
-                    
-                    document.body.appendChild(overlay);
-                    
-                    // 延迟后自动点击
-                    setTimeout(() => {
-                        if (document.getElementById('autoClickOverlay')) {
-                            this.log('执行自动点击');
-                            overlay.click();
+            // 设置监听器
+            setupListener() {
+                const checkAppOpened = () => {
+                    if (document.hidden && !this.state.appOpened) {
+                        const elapsed = Date.now() - this.state.startTime;
+                        this.log(`页面隐藏检测 (开始后${elapsed}ms)`);
+                        
+                        if (elapsed > 100) {
+                            this.onAppOpened('页面隐藏');
                         }
-                    }, 50);
-                    
-                    // 3秒后移除
-                    setTimeout(() => {
-                        const overlay = document.getElementById('autoClickOverlay');
-                        if (overlay && overlay.parentNode) {
-                            overlay.parentNode.removeChild(overlay);
-                        }
-                    }, 3000);
-                    
-                } catch (error) {
-                    this.log('自动点击失败: ' + error);
-                }
-            }
-            
-            // 策略3：直接跳转
-            tryDirectMethod() {
-                if (this.state.appOpened) return;
-                
-                this.state.launchAttempts++;
-                this.state.currentMethod = 'direct';
-                this.log('尝试直接跳转');
-                
-                try {
-                    const schemeUrl = this.buildSchemeUrl();
-                    window.location.href = schemeUrl;
-                } catch (error) {
-                    this.log('直接跳转失败: ' + error);
-                }
-            }
-            
-            // 策略4：模拟用户交互
-            trySimulatedInteraction() {
-                if (this.state.appOpened) return;
-                
-                this.state.launchAttempts++;
-                this.state.currentMethod = 'simulated';
-                this.log('尝试模拟用户交互');
-                
-                try {
-                    // 创建并点击隐藏链接
-                    const link = document.createElement('a');
-                    link.href = this.buildSchemeUrl();
-                    link.style.display = 'none';
-                    document.body.appendChild(link);
-                    
-                    // 触发点击事件
-                    const clickEvent = new MouseEvent('click', {
-                        view: window,
-                        bubbles: true,
-                        cancelable: true
-                    });
-                    
-                    link.dispatchEvent(clickEvent);
-                    
-                    // 清理
-                    setTimeout(() => {
-                        if (link.parentNode) {
-                            link.parentNode.removeChild(link);
-                        }
-                    }, 100);
-                    
-                } catch (error) {
-                    this.log('模拟交互失败: ' + error);
-                }
-            }
-            
-            // 策略5：最终尝试 - 使用window.open
-            tryFinalMethod() {
-                if (this.state.appOpened) return;
-                
-                this.state.launchAttempts++;
-                this.state.currentMethod = 'window.open';
-                this.log('尝试window.open方式');
-                
-                try {
-                    const schemeUrl = this.buildSchemeUrl();
-                    
-                    // 在某些浏览器中，window.open可能有效
-                    const newWindow = window.open(schemeUrl, '_blank');
-                    
-                    if (newWindow) {
-                        setTimeout(() => {
-                            newWindow.close();
-                        }, 1000);
                     }
+                };
+                
+                document.addEventListener('visibilitychange', checkAppOpened);
+            }
+            
+            // 检测到应用已安装
+            onAppDetected() {
+                if (this.state.appOpened || this.state.userResponded) return;
+                
+                this.log('检测到应用已安装');
+                
+                // 停止超时计时器
+                clearTimeout(this.state.timer);
+                
+                // 显示弹窗让用户选择
+                this.showModal();
+                
+                // 更新状态显示
+                this.elements.statusText.textContent = '检测到本地应用';
+                this.elements.timerInfo.textContent = '请选择操作...';
+                
+                // 设置弹窗自动超时（10秒后自动选择）
+                setTimeout(() => {
+                    if (!this.state.userResponded && this.state.modalShown) {
+                        this.log('弹窗超时，自动选择"立即打开"');
+                        this.state.userResponded = true;
+                        this.hideModal();
+                        this.launchApp();
+                    }
+                }, 10000);
+            }
+            
+            // 用户取消
+            onUserCancelled() {
+                this.log('用户取消打开应用');
+                this.state.phase = 'cancelled';
+                
+                // 继续超时流程
+                setTimeout(() => {
+                    this.onAppNotInstalled();
+                }, 300);
+            }
+            
+            // 拉起应用
+            launchApp() {
+                if (this.state.appOpened) return;
+                
+                this.log('执行应用拉起');
+                this.state.phase = 'launching';
+                
+                this.elements.statusText.textContent = '正在打开应用...';
+                this.elements.timerInfo.textContent = '请稍候...';
+                
+                // 使用直接跳转方式
+                try {
+                    const schemeUrl = this.buildSchemeUrl();
+                    this.log(`拉起URL: ${schemeUrl}`);
+                    window.location.href = schemeUrl;
+                    
+                    // 设置超时检查
+                    setTimeout(() => {
+                        if (!this.state.appOpened) {
+                            this.log('拉起可能失败，再次尝试');
+                            window.location.href = schemeUrl;
+                        }
+                    }, 500);
                     
                 } catch (error) {
-                    this.log('window.open失败: ' + error);
+                    this.log('拉起失败: ' + error);
+                    this.onAppNotInstalled();
                 }
             }
             
-            // 标记应用已打开
-            markAppOpened(source) {
+            // 应用已打开
+            onAppOpened(source) {
                 if (this.state.appOpened) return;
                 
                 this.state.appOpened = true;
-                this.log(`✓ 应用已自动打开 (${source})`);
-                this.updateDebugInfo();
+                this.state.phase = 'success';
+                this.log(`✓ 应用已打开 (${source})`);
                 
                 clearTimeout(this.state.timer);
                 clearInterval(this.state.countdownInterval);
+                this.hideModal();
                 
                 this.elements.statusText.textContent = '应用已成功打开！';
                 this.elements.statusText.style.color = '#28a745';
                 this.elements.timerInfo.textContent = '正在切换到应用...';
-                
-                // 清理透明层
-                const overlay = document.getElementById('autoClickOverlay');
-                if (overlay && overlay.parentNode) {
-                    overlay.parentNode.removeChild(overlay);
-                }
+                this.updateDebugInfo();
             }
             
             // 处理超时
             handleTimeout() {
-                if (this.state.appOpened) {
-                    this.log('超时跳过，应用已打开');
+                if (this.state.appOpened || this.state.userResponded) {
+                    this.log('超时处理跳过');
                     return;
                 }
                 
                 const elapsed = Date.now() - this.state.startTime;
                 this.log(`✗ 2秒超时 (${elapsed}ms)`);
+                this.state.phase = 'timeout';
+                
+                // 如果弹窗还在显示，先隐藏
+                if (this.state.modalShown) {
+                    this.hideModal();
+                }
                 
                 // 最终检查
-                if (document.hidden && this.state.launchAttempts > 0) {
+                if (document.hidden) {
                     this.log('最终检查：页面隐藏');
-                    this.markAppOpened('超时检查');
+                    this.onAppOpened('超时检查');
                     return;
                 }
                 
@@ -588,15 +646,10 @@
             onAppNotInstalled() {
                 clearInterval(this.state.countdownInterval);
                 
-                // 清理透明层
-                const overlay = document.getElementById('autoClickOverlay');
-                if (overlay && overlay.parentNode) {
-                    overlay.parentNode.removeChild(overlay);
-                }
-                
                 this.elements.statusText.textContent = '应用未安装';
                 this.elements.statusText.style.color = '#dc3545';
                 this.elements.timerInfo.textContent = '正在跳转到应用商店...';
+                this.updateDebugInfo();
                 
                 setTimeout(() => {
                     this.showStoreRedirect();
@@ -641,19 +694,13 @@
             
             const launcher = new AppLauncher(CONFIG);
             
-            // 延迟500ms开始
+            // 延迟800ms开始，让页面完全加载
             setTimeout(() => {
                 launcher.start();
-            }, 500);
+            }, 800);
             
             // 暴露给调试
             window.launcher = launcher;
-            
-            // 调试函数
-            window.manualTest = () => {
-                console.log('手动测试Scheme...');
-                window.location.href = 'neweraky.sandblast://launch';
-            };
         });
     </script>
 </body>

@@ -5,258 +5,38 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>启动Sand Blast</title>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            padding: 20px;
-        }
-        
-        .container {
-            background: white;
-            border-radius: 20px;
-            padding: 40px 30px;
-            text-align: center;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-            max-width: 500px;
-            width: 100%;
-            position: relative;
-            z-index: 1;
-        }
-        
-        .app-icon {
-            width: 100px;
-            height: 100px;
-            margin: 0 auto 20px;
-            background: linear-gradient(135deg, #FF6B6B 0%, #FF8E53 100%);
-            border-radius: 20px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-size: 48px;
-        }
-        
-        h1 {
-            color: #333;
-            margin-bottom: 10px;
-            font-size: 28px;
-        }
-        
-        .subtitle {
-            color: #666;
-            margin-bottom: 30px;
-        }
-        
-        .status-area {
-            margin: 30px 0;
-            padding: 25px;
-            background: #f8f9fa;
-            border-radius: 15px;
-        }
-        
-        .loading {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 20px;
-        }
-        
-        .spinner {
-            width: 50px;
-            height: 50px;
-            border: 4px solid #f3f3f3;
-            border-top: 4px solid #667eea;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-        }
-        
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-        
-        .countdown {
-            font-size: 24px;
-            font-weight: bold;
-            color: #667eea;
-            margin: 10px 0;
-        }
-        
-        .progress-bar {
-            width: 200px;
-            height: 6px;
-            background: #e9ecef;
-            border-radius: 3px;
-            margin: 15px auto;
-            overflow: hidden;
-        }
-        
-        .progress-fill {
-            height: 100%;
-            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
-            width: 0%;
-            border-radius: 3px;
-            animation: progressFill 3s linear forwards;
-        }
-        
-        @keyframes progressFill {
-            0% { width: 0%; }
-            100% { width: 100%; }
-        }
-        
-        .fallback {
-            display: none;
-            animation: fadeIn 0.5s;
-        }
-        
-        @keyframes fadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
-        }
-        
-        .btn {
-            display: inline-block;
-            background: #3DDC84;
-            color: white;
-            padding: 15px 40px;
-            border-radius: 30px;
-            text-decoration: none;
-            font-weight: bold;
-            font-size: 16px;
-            margin-top: 20px;
-        }
-        
-        .tips {
-            margin-top: 20px;
-            padding: 15px;
-            background: #f8f9fa;
-            border-radius: 10px;
-            font-size: 14px;
-            color: #666;
-        }
-        
-        /* 弹窗样式 - 居中显示 */
-        .modal-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.5);
-            display: none;
-            justify-content: center;
-            align-items: center;
-            z-index: 10000;
-            animation: fadeIn 0.3s ease;
-        }
-        
-        .modal-content {
-            background: white;
-            border-radius: 20px;
-            padding: 30px;
-            max-width: 400px;
-            width: 90%;
-            text-align: center;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-            animation: slideUp 0.3s ease;
-        }
-        
-        @keyframes slideUp {
-            from {
-                opacity: 0;
-                transform: translateY(30px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-        
-        .modal-icon {
-            width: 80px;
-            height: 80px;
-            margin: 0 auto 20px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            border-radius: 20px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-size: 40px;
-        }
-        
-        .modal-title {
-            color: #333;
-            font-size: 24px;
-            font-weight: bold;
-            margin-bottom: 10px;
-        }
-        
-        .modal-text {
-            color: #666;
-            margin-bottom: 25px;
-            line-height: 1.5;
-        }
-        
-        .modal-buttons {
-            display: flex;
-            gap: 15px;
-            justify-content: center;
-        }
-        
-        .modal-btn {
-            flex: 1;
-            padding: 15px;
-            border-radius: 15px;
-            font-weight: bold;
-            font-size: 16px;
-            cursor: pointer;
-            border: none;
-            transition: all 0.3s;
-        }
-        
-        .modal-btn-primary {
-            background: #3DDC84;
-            color: white;
-        }
-        
-        .modal-btn-primary:hover {
-            background: #2BB673;
-            transform: translateY(-2px);
-        }
-        
-        .modal-btn-secondary {
-            background: #f8f9fa;
-            color: #666;
-            border: 2px solid #e9ecef;
-        }
-        
-        .modal-btn-secondary:hover {
-            background: #f1f3f5;
-        }
-        
-        .debug {
-            position: fixed;
-            top: 10px;
-            left: 10px;
-            background: rgba(0,0,0,0.8);
-            color: white;
-            padding: 10px;
-            border-radius: 5px;
-            font-size: 12px;
-            font-family: monospace;
-            z-index: 1000;
-        }
+        /* 样式保持不变，省略以节省空间 */
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; display: flex; justify-content: center; align-items: center; padding: 20px; }
+        .container { background: white; border-radius: 20px; padding: 40px 30px; text-align: center; box-shadow: 0 20px 60px rgba(0,0,0,0.3); max-width: 500px; width: 100%; position: relative; z-index: 1; }
+        .app-icon { width: 100px; height: 100px; margin: 0 auto 20px; background: linear-gradient(135deg, #FF6B6B 0%, #FF8E53 100%); border-radius: 20px; display: flex; align-items: center; justify-content: center; color: white; font-size: 48px; }
+        h1 { color: #333; margin-bottom: 10px; font-size: 28px; }
+        .subtitle { color: #666; margin-bottom: 30px; }
+        .status-area { margin: 30px 0; padding: 25px; background: #f8f9fa; border-radius: 15px; }
+        .loading { display: flex; flex-direction: column; align-items: center; gap: 20px; }
+        .spinner { width: 50px; height: 50px; border: 4px solid #f3f3f3; border-top: 4px solid #667eea; border-radius: 50%; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .countdown { font-size: 24px; font-weight: bold; color: #667eea; margin: 10px 0; }
+        .progress-bar { width: 200px; height: 6px; background: #e9ecef; border-radius: 3px; margin: 15px auto; overflow: hidden; }
+        .progress-fill { height: 100%; background: linear-gradient(90deg, #667eea 0%, #764ba2 100%); width: 0%; border-radius: 3px; animation: progressFill 3s linear forwards; }
+        @keyframes progressFill { 0% { width: 0%; } 100% { width: 100%; } }
+        .fallback { display: none; animation: fadeIn 0.5s; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .btn { display: inline-block; background: #3DDC84; color: white; padding: 15px 40px; border-radius: 30px; text-decoration: none; font-weight: bold; font-size: 16px; margin-top: 20px; }
+        .tips { margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 10px; font-size: 14px; color: #666; }
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.5); display: none; justify-content: center; align-items: center; z-index: 10000; animation: fadeIn 0.3s ease; }
+        .modal-content { background: white; border-radius: 20px; padding: 30px; max-width: 400px; width: 90%; text-align: center; box-shadow: 0 20px 60px rgba(0,0,0,0.3); animation: slideUp 0.3s ease; }
+        @keyframes slideUp { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: translateY(0); } }
+        .modal-icon { width: 80px; height: 80px; margin: 0 auto 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 20px; display: flex; align-items: center; justify-content: center; color: white; font-size: 40px; }
+        .modal-title { color: #333; font-size: 24px; font-weight: bold; margin-bottom: 10px; }
+        .modal-text { color: #666; margin-bottom: 25px; line-height: 1.5; }
+        .modal-buttons { display: flex; gap: 15px; justify-content: center; }
+        .modal-btn { flex: 1; padding: 15px; border-radius: 15px; font-weight: bold; font-size: 16px; cursor: pointer; border: none; transition: all 0.3s; }
+        .modal-btn-primary { background: #3DDC84; color: white; }
+        .modal-btn-primary:hover { background: #2BB673; transform: translateY(-2px); }
+        .modal-btn-secondary { background: #f8f9fa; color: #666; border: 2px solid #e9ecef; }
+        .modal-btn-secondary:hover { background: #f1f3f5; }
+        .debug { position: fixed; top: 10px; left: 10px; background: rgba(0,0,0,0.8); color: white; padding: 10px; border-radius: 5px; font-size: 12px; font-family: monospace; z-index: 1000; }
     </style>
 </head>
 <body>
@@ -300,13 +80,6 @@
         </div>
     </div>
 
-    <div class="debug" id="debugPanel" style="display: none;">
-        <div>状态: <span id="debugState">-</span></div>
-        <div>时间: <span id="debugTime">0</span>ms</div>
-        <div>焦点: <span id="debugFocus">-</span></div>
-        <div>计时器: <span id="debugTimer">运行</span></div>
-    </div>
-
     <script>
         // ==================== 配置区域 ====================
         const CONFIG = {
@@ -318,31 +91,26 @@
         };
         // =================================================
 
-        class FixedAppLauncher {
+        class SimpleReliableLauncher {
             constructor(config) {
                 this.config = config;
                 
-                // 核心状态
+                // 简化的状态管理
                 this.state = {
-                    // 检测状态
-                    appLaunched: false,      // 是否已尝试唤起
-                    pageLostFocus: false,    // 页面是否失去焦点
+                    // 核心标志
+                    hasBlur: false,          // 是否失去焦点（参考示例代码）
                     appOpened: false,        // 应用是否已打开
                     modalShown: false,       // 弹窗是否已显示
                     userResponded: false,    // 用户是否已响应
                     
-                    // 环境状态
-                    isWeChat: false,
-                    isAndroid: /Android/i.test(navigator.userAgent),
-                    
-                    // 计时器控制
+                    // 计时器
                     startTime: null,
                     timeoutTimer: null,
                     countdownInterval: null,
-                    shouldCountdown: true,   // 是否继续倒计时
                     
-                    // 焦点追踪
-                    focusEvents: []
+                    // 环境
+                    isAndroid: /Android/i.test(navigator.userAgent),
+                    isWeChat: /micromessenger/i.test(navigator.userAgent.toLowerCase())
                 };
                 
                 this.elements = {
@@ -354,68 +122,29 @@
                     storeBtn: document.getElementById('storeBtn'),
                     modalOverlay: document.getElementById('modalOverlay'),
                     modalCancel: document.getElementById('modalCancel'),
-                    modalOpen: document.getElementById('modalOpen'),
-                    debugPanel: document.getElementById('debugPanel'),
-                    debugState: document.getElementById('debugState'),
-                    debugTime: document.getElementById('debugTime'),
-                    debugFocus: document.getElementById('debugFocus'),
-                    debugTimer: document.getElementById('debugTimer')
+                    modalOpen: document.getElementById('modalOpen')
                 };
                 
-                if (this.config.debug) {
-                    this.elements.debugPanel.style.display = 'block';
-                }
-                
-                this.checkEnvironment();
-                this.updateDebugInfo();
                 this.bindModalEvents();
-                
-                console.log('初始化完成:', {
-                    isWeChat: this.state.isWeChat,
+                console.log('✅ 初始化完成', {
                     isAndroid: this.state.isAndroid,
-                    initialFocus: document.hasFocus()
+                    isWeChat: this.state.isWeChat
                 });
             }
             
-            checkEnvironment() {
-                const ua = navigator.userAgent.toLowerCase();
-                this.state.isWeChat = ua.indexOf('micromessenger') !== -1;
-            }
-            
-            updateDebugInfo() {
-                this.elements.debugState.textContent = this.getStateDescription();
-                this.elements.debugTime.textContent = this.state.startTime ? Date.now() - this.state.startTime : 0;
-                this.elements.debugFocus.textContent = this.state.pageLostFocus ? '失去焦点' : '有焦点';
-                this.elements.debugTimer.textContent = this.state.shouldCountdown ? '运行' : '已停止';
-            }
-            
-            getStateDescription() {
-                if (this.state.appOpened) return '应用已打开';
-                if (this.state.modalShown) return '弹窗已显示';
-                if (this.state.userResponded) return '用户已响应';
-                if (this.state.pageLostFocus) return '页面失焦';
-                return '检测中';
-            }
-            
             bindModalEvents() {
-                // 打开应用按钮
                 this.elements.modalOpen.onclick = () => {
                     console.log('用户点击"打开应用"');
                     this.state.userResponded = true;
                     this.hideModal();
-                    this.launchAppDirectly();
+                    this.launchAppNow();
                 };
                 
-                // 取消按钮
                 this.elements.modalCancel.onclick = () => {
                     console.log('用户点击"取消"');
                     this.state.userResponded = true;
                     this.hideModal();
-                    
-                    // 用户取消后，恢复跳转逻辑
-                    setTimeout(() => {
-                        this.goToPlayStore();
-                    }, 300);
+                    this.goToStore();
                 };
             }
             
@@ -428,7 +157,7 @@
                 this.state.modalShown = true;
                 this.elements.modalOverlay.style.display = 'flex';
                 
-                // 【关键】停止所有倒计时和超时逻辑
+                // 立即停止所有计时器
                 this.stopAllTimers();
                 
                 // 更新UI
@@ -436,33 +165,25 @@
                 this.elements.statusText.style.color = '#28a745';
                 this.elements.countdown.textContent = '∞';
                 this.elements.timerInfo.textContent = '请选择操作...';
-                this.updateDebugInfo();
             }
             
             hideModal() {
                 console.log('隐藏弹窗');
                 this.elements.modalOverlay.style.display = 'none';
-                this.state.modalShown = false;
             }
             
             stopAllTimers() {
                 console.log('⏹️ 停止所有计时器');
                 
-                // 停止倒计时
-                if (this.state.countdownInterval) {
-                    clearInterval(this.state.countdownInterval);
-                    this.state.countdownInterval = null;
-                }
-                
-                // 停止超时定时器
                 if (this.state.timeoutTimer) {
                     clearTimeout(this.state.timeoutTimer);
                     this.state.timeoutTimer = null;
                 }
                 
-                // 标记不再继续倒计时
-                this.state.shouldCountdown = false;
-                this.updateDebugInfo();
+                if (this.state.countdownInterval) {
+                    clearInterval(this.state.countdownInterval);
+                    this.state.countdownInterval = null;
+                }
             }
             
             buildSchemeUrl() {
@@ -475,44 +196,47 @@
             }
             
             start() {
-                console.log('🚀 开始检测流程');
+                console.log('🚀 开始流程');
                 this.state.startTime = Date.now();
                 
-                // 开始3秒倒计时显示
-                this.startCountdownDisplay();
-                
-                // 微信环境特殊处理
-                if (this.state.isWeChat) {
-                    this.handleWeChatEnvironment();
-                    return;
-                }
-                
-                // 非Android设备
+                // 检查环境
                 if (!this.state.isAndroid) {
                     this.showNonAndroid();
                     return;
                 }
                 
-                // Android设备：执行核心检测逻辑
-                this.executeCoreDetection();
+                if (this.state.isWeChat) {
+                    this.handleWeChat();
+                    return;
+                }
+                
+                // 开始3秒倒计时显示
+                this.startCountdown();
+                
+                // 设置3秒超时
+                this.state.timeoutTimer = setTimeout(() => {
+                    this.handleTimeout();
+                }, this.config.timeout);
+                
+                // ========== 核心逻辑开始 ==========
+                
+                // 1. 立即尝试唤起应用
+                this.tryLaunchApp();
+                
+                // 2. 设置焦点监听器（参考示例代码）
+                this.setupFocusListeners();
             }
             
-            startCountdownDisplay() {
-                // 只是UI显示倒计时，不影响实际逻辑
+            startCountdown() {
+                // 只是UI显示，不影响逻辑
                 let countdownValue = 3;
                 this.elements.countdown.textContent = countdownValue;
                 
                 this.state.countdownInterval = setInterval(() => {
-                    if (!this.state.shouldCountdown) {
-                        // 如果shouldCountdown为false，停止倒计时
-                        clearInterval(this.state.countdownInterval);
-                        return;
-                    }
-                    
                     const elapsed = Date.now() - this.state.startTime;
                     const remaining = Math.max(0, this.config.timeout - elapsed);
                     
-                    // 更新倒计时显示
+                    // 更新显示
                     countdownValue = Math.ceil(remaining / 1000);
                     this.elements.countdown.textContent = countdownValue;
                     this.elements.timerInfo.textContent = `等待: ${(elapsed / 1000).toFixed(1)}秒`;
@@ -521,56 +245,18 @@
                     if (elapsed >= this.config.timeout) {
                         clearInterval(this.state.countdownInterval);
                     }
-                    
-                    this.updateDebugInfo();
                 }, 100);
             }
             
-            executeCoreDetection() {
-                console.log('🔗 执行核心检测逻辑');
-                
-                // 【关键】立即尝试唤起应用
-                this.tryToLaunchApp();
-                
-                // 【关键】设置3秒超时检查
-                this.state.timeoutTimer = setTimeout(() => {
-                    this.handleTimeout();
-                }, this.config.timeout);
-                
-                // 【关键】设置焦点监听器
-                this.setupFocusListeners();
-            }
-            
-            tryToLaunchApp() {
-                if (this.state.appLaunched) return;
-                
-                this.state.appLaunched = true;
-                console.log('⚡ 立即尝试唤起应用');
+            tryLaunchApp() {
+                console.log('🔗 尝试唤起应用');
                 
                 try {
                     const schemeUrl = this.buildSchemeUrl();
-                    console.log('唤起URL:', schemeUrl);
+                    console.log('Scheme URL:', schemeUrl);
                     
-                    // 方法1：直接location跳转
-                    setTimeout(() => {
-                        window.location.href = schemeUrl;
-                    }, 10);
-                    
-                    // 方法2：备用iframe方式
-                    setTimeout(() => {
-                        if (!this.state.pageLostFocus && !this.state.modalShown) {
-                            const iframe = document.createElement('iframe');
-                            iframe.style.cssText = 'display:none;width:0;height:0;border:none;';
-                            iframe.src = schemeUrl;
-                            document.body.appendChild(iframe);
-                            
-                            setTimeout(() => {
-                                if (iframe.parentNode) {
-                                    iframe.parentNode.removeChild(iframe);
-                                }
-                            }, 1000);
-                        }
-                    }, 100);
+                    // 直接跳转（参考示例代码）
+                    location.href = schemeUrl;
                     
                 } catch (error) {
                     console.log('唤起失败:', error);
@@ -580,184 +266,150 @@
             setupFocusListeners() {
                 console.log('👂 设置焦点监听器');
                 
-                // 记录焦点事件
-                this.state.focusEvents.push({
-                    type: 'initial',
-                    time: Date.now(),
-                    hasFocus: document.hasFocus()
-                });
+                // ========== 参考示例代码的核心逻辑 ==========
                 
-                // ========== 核心监听逻辑 ==========
-                
-                // 1. window.onblur - 最直接的失去焦点检测
+                // 方法1：window.onblur（最简单直接）
                 window.onblur = () => {
-                    this.handleFocusLost('window_blur');
+                    this.onFocusLost('window_onblur');
                 };
                 
-                // 2. window.addEventListener('blur') - 备用
-                window.addEventListener('blur', () => {
-                    this.handleFocusLost('window_blur_event');
-                });
+                // 方法2：visibilitychange（备用）
+                const hiddenProperty = 'hidden' in document ? 'hidden' :
+                                    'webkitHidden' in document ? 'webkitHidden' :
+                                    'mozHidden' in document ? 'mozHidden' :
+                                    null;
                 
-                // 3. visibilitychange - 页面隐藏检测
-                const handleVisibilityChange = () => {
-                    if (document.hidden) {
-                        this.handleFocusLost('visibility_hidden');
-                    }
-                };
-                
-                // 兼容不同浏览器
-                document.addEventListener('visibilitychange', handleVisibilityChange);
-                document.addEventListener('webkitvisibilitychange', handleVisibilityChange);
-                document.addEventListener('mozvisibilitychange', handleVisibilityChange);
-                
-                // 4. pagehide - 页面卸载
-                window.addEventListener('pagehide', () => {
-                    this.handleFocusLost('pagehide');
-                });
-                
-                // 5. focus事件 - 用户返回页面
-                window.addEventListener('focus', () => {
-                    const elapsed = Date.now() - this.state.startTime;
-                    console.log(`🔙 窗口获得焦点 (${elapsed}ms)`);
+                if (hiddenProperty) {
+                    const visibilityChangeEvent = hiddenProperty.replace(/hidden/i, 'visibilitychange');
                     
-                    this.state.focusEvents.push({
-                        type: 'focus',
-                        time: Date.now(),
-                        elapsed: elapsed
+                    document.addEventListener(visibilityChangeEvent, () => {
+                        if (document[hiddenProperty]) {
+                            this.onFocusLost('visibility_hidden');
+                        }
                     });
-                    
-                    // 如果用户返回页面且还没有显示弹窗，显示弹窗
-                    if (this.state.pageLostFocus && !this.state.modalShown && !this.state.appOpened) {
-                        console.log('用户返回页面，显示弹窗');
-                        this.showModal();
-                    }
+                }
+                
+                // 方法3：window.addEventListener('blur')（双重保险）
+                window.addEventListener('blur', () => {
+                    this.onFocusLost('window_blur_event');
                 });
             }
             
-            handleFocusLost(source) {
-                if (this.state.pageLostFocus || this.state.appOpened || this.state.modalShown) {
+            onFocusLost(source) {
+                // 如果已经处理过，直接返回
+                if (this.state.hasBlur || this.state.appOpened || this.state.modalShown || this.state.userResponded) {
                     return;
                 }
                 
                 const elapsed = Date.now() - this.state.startTime;
                 console.log(`💫 失去焦点检测 (${source}, ${elapsed}ms)`);
                 
-                this.state.pageLostFocus = true;
-                this.state.focusEvents.push({
-                    type: 'blur',
-                    source: source,
-                    time: Date.now(),
-                    elapsed: elapsed
-                });
+                // 标记已失去焦点
+                this.state.hasBlur = true;
                 
-                this.updateDebugInfo();
-                
-                // 【关键】检测到失去焦点，停止3秒倒计时
+                // 【关键】立即停止所有计时器
                 this.stopAllTimers();
                 
-                // 【关键】延迟显示自定义弹窗（给系统弹窗时间）
-                setTimeout(() => {
-                    if (this.state.pageLostFocus && !this.state.appOpened && !this.state.modalShown) {
-                        console.log('✅ 确认失去焦点，显示自定义弹窗');
-                        this.showModal();
-                    }
-                }, 800); // 800ms延迟，确保系统弹窗已显示
+                // 【关键】立即显示自定义弹窗（不要延迟）
+                this.showModal();
             }
             
             handleTimeout() {
-                // 检查是否应该执行超时逻辑
-                if (this.state.pageLostFocus || this.state.modalShown || this.state.appOpened || this.state.userResponded) {
-                    console.log('⏰ 超时但状态已确定，跳过跳转');
+                // 检查是否应该执行超时
+                if (this.state.hasBlur || this.state.modalShown || this.state.appOpened || this.state.userResponded) {
+                    console.log('⏰ 超时但状态已确定，跳过');
                     return;
                 }
                 
                 const elapsed = Date.now() - this.state.startTime;
                 console.log(`⏰ 3秒超时 (${elapsed}ms)`);
-                console.log('最终状态:', {
-                    pageLostFocus: this.state.pageLostFocus,
-                    modalShown: this.state.modalShown,
-                    appOpened: this.state.appOpened,
-                    userResponded: this.state.userResponded
-                });
                 
-                // 【关键】3秒内都没有失去焦点 → 应用未安装
-                this.goToPlayStore();
+                // 应用未安装
+                this.onAppNotInstalled();
             }
             
-            handleWeChatEnvironment() {
-                console.log('⚠️ 微信环境，无法直接唤起');
-                this.elements.statusText.textContent = '请在浏览器中打开此链接';
+            onAppNotInstalled() {
+                console.log('📦 应用未安装');
+                this.stopAllTimers();
+                
+                this.elements.statusText.textContent = '应用未安装';
                 this.elements.statusText.style.color = '#dc3545';
+                this.elements.timerInfo.textContent = '正在跳转到应用商店...';
                 
-                // 3秒后跳转
-                this.state.timeoutTimer = setTimeout(() => {
-                    this.goToPlayStore();
-                }, 3000);
+                setTimeout(() => {
+                    this.showStoreRedirect();
+                }, 500);
             }
             
-            launchAppDirectly() {
-                console.log('💪 直接唤起应用');
+            launchAppNow() {
+                console.log('💪 立即打开应用');
                 
                 try {
                     const schemeUrl = this.buildSchemeUrl();
-                    window.location.href = schemeUrl;
+                    location.href = schemeUrl;
                     
                     // 保险措施
                     setTimeout(() => {
                         if (!this.state.appOpened) {
-                            window.location.href = schemeUrl;
+                            location.href = schemeUrl;
                         }
-                    }, 500);
+                    }, 300);
                     
                 } catch (error) {
-                    console.log('直接唤起失败:', error);
-                    this.goToPlayStore();
+                    console.log('打开失败:', error);
+                    this.goToStore();
                 }
             }
             
-            goToPlayStore() {
-                console.log('🔗 跳转到应用商店');
-                this.state.userResponded = true;
-                
-                // 显示跳转界面
+            showStoreRedirect() {
                 this.elements.loading.style.display = 'none';
                 this.elements.fallback.style.display = 'block';
                 
-                // 设置商店链接
                 this.elements.storeBtn.href = this.config.playStoreUrl;
                 this.elements.storeBtn.onclick = (e) => {
                     e.preventDefault();
-                    location.href = this.config.playStoreUrl;
+                    this.goToStore();
                 };
                 
                 // 自动跳转
                 setTimeout(() => {
-                    location.href = this.config.playStoreUrl;
+                    this.goToStore();
                 }, 1500);
+            }
+            
+            goToStore() {
+                console.log('🔗 跳转到应用商店');
+                location.href = this.config.playStoreUrl;
+            }
+            
+            handleWeChat() {
+                console.log('⚠️ 微信环境');
+                this.elements.statusText.textContent = '请在浏览器中打开此链接';
+                this.elements.statusText.style.color = '#dc3545';
+                
+                setTimeout(() => {
+                    this.showStoreRedirect();
+                }, 2000);
             }
             
             showNonAndroid() {
                 console.log('⚠️ 非Android设备');
                 this.elements.statusText.textContent = '此链接仅支持Android设备';
                 
-                this.state.timeoutTimer = setTimeout(() => {
-                    this.goToPlayStore();
-                }, 2000);
+                setTimeout(() => {
+                    this.showStoreRedirect();
+                }, 1500);
             }
         }
         
         // 页面加载完成后启动
         document.addEventListener('DOMContentLoaded', () => {
-            console.log('🚀 === 修复版应用拉起方案 ===');
-            console.log('配置:', CONFIG);
+            console.log('🚀 === 简化可靠版本 ===');
             
-            const launcher = new FixedAppLauncher(CONFIG);
+            const launcher = new SimpleReliableLauncher(CONFIG);
             
-            // 延迟启动
-            setTimeout(() => {
-                launcher.start();
-            }, 500);
+            // 立即开始
+            launcher.start();
             
             window.launcher = launcher;
         });

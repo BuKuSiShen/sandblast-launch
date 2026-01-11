@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>启动Sand Blast</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 40px 30px;
+            text-align: center;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            max-width: 500px;
+            width: 100%;
+        }
+        
+        .app-icon {
+            width: 100px;
+            height: 100px;
+            margin: 0 auto 20px;
+            background: linear-gradient(135deg, #FF6B6B 0%, #FF8E53 100%);
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 48px;
+        }
+        
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+        
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+        }
+        
+        .status-area {
+            margin: 30px 0;
+            padding: 25px;
+            background: #f8f9fa;
+            border-radius: 15px;
+        }
+        
+        .loading {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+        }
+        
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .countdown {
+            font-size: 24px;
+            font-weight: bold;
+            color: #667eea;
+            margin: 10px 0;
+        }
+        
+        .progress-bar {
+            width: 200px;
+            height: 6px;
+            background: #e9ecef;
+            border-radius: 3px;
+            margin: 15px auto;
+            overflow: hidden;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            width: 0%;
+            border-radius: 3px;
+            animation: progressFill 2s linear forwards;
+        }
+        
+        @keyframes progressFill {
+            0% { width: 0%; }
+            100% { width: 100%; }
+        }
+        
+        .fallback {
+            display: none;
+            animation: fadeIn 0.5s;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        
+        .btn {
+            display: inline-block;
+            background: #3DDC84;
+            color: white;
+            padding: 15px 40px;
+            border-radius: 30px;
+            text-decoration: none;
+            font-weight: bold;
+            font-size: 16px;
+            margin-top: 20px;
+        }
+        
+        .tips {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            font-size: 14px;
+            color: #666;
+        }
+        
+        .debug {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.8);
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 12px;
+            font-family: monospace;
+            z-index: 1000;
+        }
+        
+        /* 透明覆盖层 - 用于自动点击 */
+        .auto-click-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: transparent;
+            z-index: 99999;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="app-icon">💥</div>
+        <h1>Sand Blast</h1>
+        <p class="subtitle">正在启动游戏...</p>
+        
+        <div class="status-area">
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <div class="countdown" id="countdown">2</div>
+                <p id="statusText">正在尝试打开本地应用...</p>
+                <div class="progress-bar">
+                    <div class="progress-fill"></div>
+                </div>
+                <p id="timerInfo" style="color: #888; font-size: 14px;">等待: 0.0秒</p>
+            </div>
+            
+            <div class="fallback" id="fallback">
+                <p style="color: #666; margin-bottom: 20px;">应用未安装，正在跳转到应用商店...</p>
+                <a href="#" id="storeBtn" class="btn">立即前往 Google Play</a>
+            </div>
+        </div>
+        
+        <div class="tips">
+            <p>💡 2秒内尝试打开本地应用，失败后自动跳转应用商店</p>
+        </div>
+    </div>
+
+    <div class="debug" id="debugPanel" style="display: none;">
+        <div>状态: <span id="debugState">-</span></div>
+        <div>时间: <span id="debugTime">0</span>ms</div>
+        <div>尝试: <span id="debugAttempt">0</span></div>
+        <div>方式: <span id="debugMethod">-</span></div>
+    </div>
+
+    <script>
+        // ==================== 配置区域 ====================
+        const CONFIG = {
+            packageName: 'com.neweraky.sandblast',
+            urlScheme: 'neweraky.sandblast',
+            playStoreUrl: 'https://play.google.com/store/apps/details?id=com.agedstudio.puzzle.sand.blocks.color.blast',
+            timeout: 2000, // 2秒超时
+            debug: true
+        };
+        // =================================================
+
+        class AppLauncher {
+            constructor(config) {
+                this.config = config;
+                this.isAndroid = /Android/i.test(navigator.userAgent);
+                
+                this.state = {
+                    appOpened: false,
+                    startTime: null,
+                    timer: null,
+                    countdownInterval: null,
+                    launchAttempts: 0,
+                    currentMethod: 'none',
+                    initialPageHidden: document.hidden
+                };
+                
+                this.elements = {
+                    loading: document.getElementById('loading'),
+                    fallback: document.getElementById('fallback'),
+                    countdown: document.getElementById('countdown'),
+                    statusText: document.getElementById('statusText'),
+                    timerInfo: document.getElementById('timerInfo'),
+                    storeBtn: document.getElementById('storeBtn'),
+                    debugPanel: document.getElementById('debugPanel'),
+                    debugState: document.getElementById('debugState'),
+                    debugTime: document.getElementById('debugTime'),
+                    debugAttempt: document.getElementById('debugAttempt'),
+                    debugMethod: document.getElementById('debugMethod')
+                };
+                
+                if (this.config.debug) {
+                    this.elements.debugPanel.style.display = 'block';
+                }
+                
+                console.log('=== 自动拉起应用 ===');
+                console.log('包名:', this.config.packageName);
+                console.log('Scheme:', this.config.urlScheme);
+            }
+            
+            log(message) {
+                if (this.config.debug) {
+                    console.log(`[${Date.now()}] ${message}`);
+                    this.updateDebugInfo();
+                }
+            }
+            
+            updateDebugInfo() {
+                this.elements.debugState.textContent = this.state.appOpened ? '已打开' : '未打开';
+                this.elements.debugTime.textContent = this.state.startTime ? Date.now() - this.state.startTime : 0;
+                this.elements.debugAttempt.textContent = this.state.launchAttempts;
+                this.elements.debugMethod.textContent = this.state.currentMethod;
+            }
+            
+            // 构建Scheme URL
+            buildSchemeUrl() {
+                const params = new URLSearchParams(window.location.search);
+                const ref = params.get('ref');
+                
+                if (ref) {
+                    return `${this.config.urlScheme}://launch?ref=${encodeURIComponent(ref)}`;
+                } else {
+                    return `${this.config.urlScheme}://launch`;
+                }
+            }
+            
+            // 构建Intent URL
+            buildIntentUrl() {
+                const params = new URLSearchParams(window.location.search);
+                const ref = params.get('ref');
+                
+                let url = `intent://launch`;
+                if (ref) {
+                    url += `?ref=${encodeURIComponent(ref)}`;
+                }
+                url += `#Intent;` +
+                      `scheme=${this.config.urlScheme};` +
+                      `package=${this.config.packageName};` +
+                      `S.browser_fallback_url=${encodeURIComponent(this.config.playStoreUrl)};` +
+                      `end`;
+                
+                return url;
+            }
+            
+            // 开始流程
+            start() {
+                if (!this.isAndroid) {
+                    this.showNonAndroid();
+                    return;
+                }
+                
+                this.log('开始自动拉起流程');
+                this.state.startTime = Date.now();
+                
+                // 设置监听器
+                this.setupListener();
+                
+                // 开始倒计时
+                this.startCountdown();
+                
+                // 设置2秒超时
+                this.state.timer = setTimeout(() => {
+                    this.handleTimeout();
+                }, this.config.timeout);
+                
+                // 立即开始自动拉起
+                this.autoLaunchApp();
+            }
+            
+            // 开始倒计时
+            startCountdown() {
+                this.state.countdownInterval = setInterval(() => {
+                    const elapsed = Date.now() - this.state.startTime;
+                    const remaining = Math.max(0, this.config.timeout - elapsed);
+                    const secondsElapsed = (elapsed / 1000).toFixed(1);
+                    
+                    this.elements.countdown.textContent = Math.ceil(remaining / 1000);
+                    this.elements.timerInfo.textContent = `等待: ${secondsElapsed}秒`;
+                    this.updateDebugInfo();
+                    
+                    if (elapsed >= this.config.timeout) {
+                        clearInterval(this.state.countdownInterval);
+                    }
+                }, 100);
+            }
+            
+            // 设置监听器
+            setupListener() {
+                this.log('设置页面状态监听器');
+                
+                const checkAppOpened = () => {
+                    if (document.hidden && !this.state.appOpened) {
+                        const elapsed = Date.now() - this.state.startTime;
+                        this.log(`页面隐藏检测 (开始后${elapsed}ms)`);
+                        
+                        if (elapsed > 100) {
+                            this.markAppOpened('页面隐藏');
+                        }
+                    }
+                };
+                
+                document.addEventListener('visibilitychange', checkAppOpened);
+            }
+            
+            // 【关键】自动拉起应用 - 多种自动方式
+            autoLaunchApp() {
+                this.log('开始自动拉起尝试');
+                
+                // 策略1：立即尝试iframe方式（不需要用户交互）
+                this.tryIframeMethod();
+                
+                // 策略2：创建透明层并自动点击（100ms后）
+                setTimeout(() => {
+                    if (!this.state.appOpened) {
+                        this.tryAutoClickMethod();
+                    }
+                }, 100);
+                
+                // 策略3：直接跳转（200ms后）
+                setTimeout(() => {
+                    if (!this.state.appOpened) {
+                        this.tryDirectMethod();
+                    }
+                }, 200);
+                
+                // 策略4：模拟用户交互（300ms后）
+                setTimeout(() => {
+                    if (!this.state.appOpened) {
+                        this.trySimulatedInteraction();
+                    }
+                }, 300);
+                
+                // 策略5：最后尝试（400ms后）
+                setTimeout(() => {
+                    if (!this.state.appOpened) {
+                        this.tryFinalMethod();
+                    }
+                }, 400);
+            }
+            
+            // 策略1：iframe方式（最可靠，不需要用户交互）
+            tryIframeMethod() {
+                this.state.launchAttempts++;
+                this.state.currentMethod = 'iframe';
+                this.log('尝试iframe方式');
+                
+                try {
+                    const intentUrl = this.buildIntentUrl();
+                    
+                    // 创建隐藏的iframe
+                    const iframe = document.createElement('iframe');
+                    iframe.style.cssText = 'display:none;width:1px;height:1px;border:none;opacity:0;';
+                    iframe.src = intentUrl;
+                    document.body.appendChild(iframe);
+                    
+                    // 3秒后移除
+                    setTimeout(() => {
+                        if (iframe.parentNode) {
+                            iframe.parentNode.removeChild(iframe);
+                        }
+                    }, 3000);
+                    
+                } catch (error) {
+                    this.log('iframe方式失败: ' + error);
+                }
+            }
+            
+            // 策略2：自动点击透明层
+            tryAutoClickMethod() {
+                if (this.state.appOpened) return;
+                
+                this.state.launchAttempts++;
+                this.state.currentMethod = 'auto-click';
+                this.log('尝试自动点击方式');
+                
+                try {
+                    // 创建全屏透明层
+                    const overlay = document.createElement('div');
+                    overlay.className = 'auto-click-overlay';
+                    overlay.id = 'autoClickOverlay';
+                    
+                    // 设置点击事件
+                    overlay.onclick = () => {
+                        this.log('自动点击触发');
+                        const schemeUrl = this.buildSchemeUrl();
+                        window.location.href = schemeUrl;
+                    };
+                    
+                    document.body.appendChild(overlay);
+                    
+                    // 延迟后自动点击
+                    setTimeout(() => {
+                        if (document.getElementById('autoClickOverlay')) {
+                            this.log('执行自动点击');
+                            overlay.click();
+                        }
+                    }, 50);
+                    
+                    // 3秒后移除
+                    setTimeout(() => {
+                        const overlay = document.getElementById('autoClickOverlay');
+                        if (overlay && overlay.parentNode) {
+                            overlay.parentNode.removeChild(overlay);
+                        }
+                    }, 3000);
+                    
+                } catch (error) {
+                    this.log('自动点击失败: ' + error);
+                }
+            }
+            
+            // 策略3：直接跳转
+            tryDirectMethod() {
+                if (this.state.appOpened) return;
+                
+                this.state.launchAttempts++;
+                this.state.currentMethod = 'direct';
+                this.log('尝试直接跳转');
+                
+                try {
+                    const schemeUrl = this.buildSchemeUrl();
+                    window.location.href = schemeUrl;
+                } catch (error) {
+                    this.log('直接跳转失败: ' + error);
+                }
+            }
+            
+            // 策略4：模拟用户交互
+            trySimulatedInteraction() {
+                if (this.state.appOpened) return;
+                
+                this.state.launchAttempts++;
+                this.state.currentMethod = 'simulated';
+                this.log('尝试模拟用户交互');
+                
+                try {
+                    // 创建并点击隐藏链接
+                    const link = document.createElement('a');
+                    link.href = this.buildSchemeUrl();
+                    link.style.display = 'none';
+                    document.body.appendChild(link);
+                    
+                    // 触发点击事件
+                    const clickEvent = new MouseEvent('click', {
+                        view: window,
+                        bubbles: true,
+                        cancelable: true
+                    });
+                    
+                    link.dispatchEvent(clickEvent);
+                    
+                    // 清理
+                    setTimeout(() => {
+                        if (link.parentNode) {
+                            link.parentNode.removeChild(link);
+                        }
+                    }, 100);
+                    
+                } catch (error) {
+                    this.log('模拟交互失败: ' + error);
+                }
+            }
+            
+            // 策略5：最终尝试 - 使用window.open
+            tryFinalMethod() {
+                if (this.state.appOpened) return;
+                
+                this.state.launchAttempts++;
+                this.state.currentMethod = 'window.open';
+                this.log('尝试window.open方式');
+                
+                try {
+                    const schemeUrl = this.buildSchemeUrl();
+                    
+                    // 在某些浏览器中，window.open可能有效
+                    const newWindow = window.open(schemeUrl, '_blank');
+                    
+                    if (newWindow) {
+                        setTimeout(() => {
+                            newWindow.close();
+                        }, 1000);
+                    }
+                    
+                } catch (error) {
+                    this.log('window.open失败: ' + error);
+                }
+            }
+            
+            // 标记应用已打开
+            markAppOpened(source) {
+                if (this.state.appOpened) return;
+                
+                this.state.appOpened = true;
+                this.log(`✓ 应用已自动打开 (${source})`);
+                this.updateDebugInfo();
+                
+                clearTimeout(this.state.timer);
+                clearInterval(this.state.countdownInterval);
+                
+                this.elements.statusText.textContent = '应用已成功打开！';
+                this.elements.statusText.style.color = '#28a745';
+                this.elements.timerInfo.textContent = '正在切换到应用...';
+                
+                // 清理透明层
+                const overlay = document.getElementById('autoClickOverlay');
+                if (overlay && overlay.parentNode) {
+                    overlay.parentNode.removeChild(overlay);
+                }
+            }
+            
+            // 处理超时
+            handleTimeout() {
+                if (this.state.appOpened) {
+                    this.log('超时跳过，应用已打开');
+                    return;
+                }
+                
+                const elapsed = Date.now() - this.state.startTime;
+                this.log(`✗ 2秒超时 (${elapsed}ms)`);
+                
+                // 最终检查
+                if (document.hidden && this.state.launchAttempts > 0) {
+                    this.log('最终检查：页面隐藏');
+                    this.markAppOpened('超时检查');
+                    return;
+                }
+                
+                // 应用未安装
+                this.onAppNotInstalled();
+            }
+            
+            // 应用未安装处理
+            onAppNotInstalled() {
+                clearInterval(this.state.countdownInterval);
+                
+                // 清理透明层
+                const overlay = document.getElementById('autoClickOverlay');
+                if (overlay && overlay.parentNode) {
+                    overlay.parentNode.removeChild(overlay);
+                }
+                
+                this.elements.statusText.textContent = '应用未安装';
+                this.elements.statusText.style.color = '#dc3545';
+                this.elements.timerInfo.textContent = '正在跳转到应用商店...';
+                
+                setTimeout(() => {
+                    this.showStoreRedirect();
+                }, 300);
+            }
+            
+            // 显示商店跳转
+            showStoreRedirect() {
+                this.elements.loading.style.display = 'none';
+                this.elements.fallback.style.display = 'block';
+                
+                this.elements.storeBtn.href = this.config.playStoreUrl;
+                this.elements.storeBtn.onclick = (e) => {
+                    e.preventDefault();
+                    this.log('点击商店按钮');
+                    this.goToPlayStore();
+                };
+                
+                setTimeout(() => {
+                    this.goToPlayStore();
+                }, 500);
+            }
+            
+            // 跳转到应用商店
+            goToPlayStore() {
+                this.log('跳转到应用商店');
+                window.location.href = this.config.playStoreUrl;
+            }
+            
+            // 非Android处理
+            showNonAndroid() {
+                this.elements.statusText.textContent = '此链接仅支持Android设备';
+                setTimeout(() => {
+                    this.showStoreRedirect();
+                }, 1000);
+            }
+        }
+        
+        // 页面加载完成后启动
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('=== 页面加载完成 ===');
+            
+            const launcher = new AppLauncher(CONFIG);
+            
+            // 延迟500ms开始
+            setTimeout(() => {
+                launcher.start();
+            }, 500);
+            
+            // 暴露给调试
+            window.launcher = launcher;
+            
+            // 调试函数
+            window.manualTest = () => {
+                console.log('手动测试Scheme...');
+                window.location.href = 'neweraky.sandblast://launch';
+            };
+        });
+    </script>
+</body>
+</html>

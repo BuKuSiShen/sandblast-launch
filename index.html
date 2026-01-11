@@ -303,7 +303,8 @@
     <div class="debug" id="debugPanel" style="display: none;">
         <div>状态: <span id="debugState">-</span></div>
         <div>时间: <span id="debugTime">0</span>ms</div>
-        <div>检测: <span id="debugDetection">-</span></div>
+        <div>页面焦点: <span id="debugFocus">-</span></div>
+        <div>是否唤起: <span id="debugLaunch">-</span></div>
     </div>
 
     <script>
@@ -317,22 +318,20 @@
         };
         // =================================================
 
-        class SimpleAppLauncher {
+        class DirectAppLauncher {
             constructor(config) {
                 this.config = config;
-                this.isAndroid = /Android/i.test(navigator.userAgent);
                 
-                // 简化状态
+                // 核心状态 - 参考示例代码
                 this.state = {
-                    phase: 'init',
-                    appOpened: false,
-                    startTime: null,
-                    timer: null,
-                    countdownInterval: null,
-                    modalShown: false,
-                    userResponded: false,
-                    triedToOpen: false,
-                    pageWasHidden: false
+                    appLaunched: false,      // 是否已尝试唤起
+                    pageLostFocus: false,    // 页面是否失去焦点
+                    appOpened: false,        // 应用是否已打开
+                    modalShown: false,       // 弹窗是否已显示
+                    userResponded: false,    // 用户是否已响应
+                    isWeChat: false,         // 是否微信环境
+                    startTime: null,         // 开始时间
+                    timeoutTimer: null       // 超时定时器
                 };
                 
                 this.elements = {
@@ -348,23 +347,35 @@
                     debugPanel: document.getElementById('debugPanel'),
                     debugState: document.getElementById('debugState'),
                     debugTime: document.getElementById('debugTime'),
-                    debugDetection: document.getElementById('debugDetection')
+                    debugFocus: document.getElementById('debugFocus'),
+                    debugLaunch: document.getElementById('debugLaunch')
                 };
                 
                 if (this.config.debug) {
                     this.elements.debugPanel.style.display = 'block';
                 }
                 
-                console.log('🚀 简化启动器初始化');
+                this.checkEnvironment();
                 this.updateDebugInfo();
-                
                 this.bindModalEvents();
             }
             
+            checkEnvironment() {
+                // 检测是否微信环境
+                const ua = navigator.userAgent.toLowerCase();
+                this.state.isWeChat = ua.indexOf('micromessenger') !== -1;
+                
+                console.log('环境检测:', {
+                    isWeChat: this.state.isWeChat,
+                    isAndroid: /android/i.test(navigator.userAgent)
+                });
+            }
+            
             updateDebugInfo() {
-                this.elements.debugState.textContent = this.state.phase;
+                this.elements.debugState.textContent = this.state.appOpened ? '已打开' : '未打开';
                 this.elements.debugTime.textContent = this.state.startTime ? Date.now() - this.state.startTime : 0;
-                this.elements.debugDetection.textContent = this.state.triedToOpen ? '已尝试' : '未尝试';
+                this.elements.debugFocus.textContent = this.state.pageLostFocus ? '失去焦点' : '有焦点';
+                this.elements.debugLaunch.textContent = this.state.appLaunched ? '已尝试唤起' : '未唤起';
             }
             
             bindModalEvents() {
@@ -372,14 +383,14 @@
                     console.log('用户点击"打开应用"');
                     this.state.userResponded = true;
                     this.hideModal();
-                    this.forceLaunchApp();
+                    this.launchAppDirectly();
                 };
                 
                 this.elements.modalCancel.onclick = () => {
                     console.log('用户点击"取消"');
                     this.state.userResponded = true;
                     this.hideModal();
-                    this.redirectToStore();
+                    this.goToPlayStore();
                 };
             }
             
@@ -388,13 +399,15 @@
                     return;
                 }
                 
-                console.log('🪟 显示自定义弹窗');
+                console.log('🪟 显示自定义弹窗 - 检测到应用唤起');
                 this.state.modalShown = true;
-                this.state.phase = 'modal';
                 this.elements.modalOverlay.style.display = 'flex';
                 
-                // 清理超时
-                this.clearTimers();
+                // 清理超时定时器
+                if (this.state.timeoutTimer) {
+                    clearTimeout(this.state.timeoutTimer);
+                    this.state.timeoutTimer = null;
+                }
                 
                 // 更新UI
                 this.elements.statusText.textContent = '是否打开应用？';
@@ -409,17 +422,6 @@
                 this.elements.modalOverlay.style.display = 'none';
             }
             
-            clearTimers() {
-                if (this.state.timer) {
-                    clearTimeout(this.state.timer);
-                    this.state.timer = null;
-                }
-                if (this.state.countdownInterval) {
-                    clearInterval(this.state.countdownInterval);
-                    this.state.countdownInterval = null;
-                }
-            }
-            
             buildSchemeUrl() {
                 const params = new URLSearchParams(window.location.search);
                 const ref = params.get('ref');
@@ -430,241 +432,209 @@
             }
             
             start() {
-                if (!this.isAndroid) {
-                    this.showNonAndroid();
+                console.log('🚀 开始直接唤起流程');
+                this.state.startTime = Date.now();
+                
+                // 开始倒计时显示
+                this.startCountdown();
+                
+                // 微信环境特殊处理
+                if (this.state.isWeChat) {
+                    this.handleWeChatEnvironment();
                     return;
                 }
                 
-                console.log('🔍 开始简化流程');
-                this.state.phase = 'checking';
-                this.state.startTime = Date.now();
-                
-                // 记录初始页面状态
-                this.state.pageWasHidden = document.hidden;
-                
-                // 开始倒计时
-                this.startCountdown();
-                
-                // 设置3秒超时
-                this.state.timer = setTimeout(() => {
-                    this.handleTimeout();
-                }, this.config.timeout);
-                
-                // 立即尝试打开应用
-                this.tryToOpenApp();
-                
-                // 监听页面状态
-                this.setupSimpleListeners();
-                
-                this.updateDebugInfo();
+                // Android环境：执行唤起逻辑
+                if (/Android/i.test(navigator.userAgent)) {
+                    this.launchAppWithDetection();
+                } else {
+                    // 非Android设备
+                    this.showNonAndroid();
+                }
             }
             
             startCountdown() {
-                this.state.countdownInterval = setInterval(() => {
+                let countdownValue = 3;
+                const interval = setInterval(() => {
                     const elapsed = Date.now() - this.state.startTime;
                     const remaining = Math.max(0, this.config.timeout - elapsed);
-                    const secondsElapsed = (elapsed / 1000).toFixed(1);
                     
-                    this.elements.countdown.textContent = Math.ceil(remaining / 1000);
-                    this.elements.timerInfo.textContent = `等待: ${secondsElapsed}秒`;
+                    // 更新倒计时显示
+                    countdownValue = Math.ceil(remaining / 1000);
+                    this.elements.countdown.textContent = countdownValue;
+                    this.elements.timerInfo.textContent = `等待: ${(elapsed / 1000).toFixed(1)}秒`;
                     
+                    // 3秒结束清理
                     if (elapsed >= this.config.timeout) {
-                        clearInterval(this.state.countdownInterval);
+                        clearInterval(interval);
                     }
                 }, 100);
             }
             
-            // 尝试打开应用
-            tryToOpenApp() {
-                if (this.state.triedToOpen) return;
+            launchAppWithDetection() {
+                console.log('🔗 执行唤起应用检测逻辑');
                 
-                this.state.triedToOpen = true;
-                console.log('🔗 尝试打开应用');
+                // 记录初始焦点状态
+                const initialFocus = document.hasFocus();
+                console.log('初始焦点状态:', initialFocus);
                 
-                // 使用隐藏iframe尝试
-                setTimeout(() => {
-                    try {
-                        const schemeUrl = this.buildSchemeUrl();
-                        console.log(`Scheme URL: ${schemeUrl}`);
-                        
-                        const iframe = document.createElement('iframe');
-                        iframe.style.cssText = 'display:none;width:0;height:0;border:none;';
-                        iframe.src = schemeUrl;
-                        document.body.appendChild(iframe);
-                        
-                        // 2秒后清理
-                        setTimeout(() => {
-                            if (iframe.parentNode) {
-                                iframe.parentNode.removeChild(iframe);
-                            }
-                        }, 2000);
-                        
-                    } catch (error) {
-                        console.log('尝试打开失败:', error);
-                    }
-                }, 100);
-            }
-            
-            setupSimpleListeners() {
-                console.log('👂 设置简单监听器');
+                // ========== 核心逻辑：参考示例代码 ==========
                 
-                // 页面可见性变化 - 最直接的检测
-                let visibilityTimer;
-                document.addEventListener('visibilitychange', () => {
-                    clearTimeout(visibilityTimer);
+                // 1. 立即尝试唤起应用
+                this.state.appLaunched = true;
+                try {
+                    const schemeUrl = this.buildSchemeUrl();
+                    console.log('尝试唤起URL:', schemeUrl);
+                    location.href = schemeUrl;
+                } catch (error) {
+                    console.log('唤起失败:', error);
+                }
+                
+                // 2. 设置超时检查（1.5秒后检查是否失去焦点）
+                this.state.timeoutTimer = setTimeout(() => {
+                    console.log('⏰ 1.5秒超时检查');
+                    console.log('当前焦点状态:', {
+                        pageLostFocus: this.state.pageLostFocus,
+                        documentHidden: document.hidden,
+                        appOpened: this.state.appOpened
+                    });
                     
-                    if (document.hidden && !this.state.appOpened) {
-                        const elapsed = Date.now() - this.state.startTime;
-                        console.log(`👁️ 页面隐藏 (${elapsed}ms)`);
-                        
-                        // 延迟确认
-                        visibilityTimer = setTimeout(() => {
-                            if (document.hidden && elapsed > 200) {
-                                this.onAppOpened('visibility');
-                            }
-                        }, 300);
+                    if (!this.state.pageLostFocus && !this.state.appOpened && !this.state.modalShown) {
+                        // 没有失去焦点 → 应用未安装 → 跳转应用商店
+                        console.log('❌ 未检测到焦点变化，应用可能未安装');
+                        this.goToPlayStore();
                     }
-                });
+                }, 1500);
                 
-                // 窗口失焦 - 可能出现了系统弹窗
-                window.addEventListener('blur', () => {
-                    if (!document.hidden && !this.state.appOpened && !this.state.modalShown) {
-                        const elapsed = Date.now() - this.state.startTime;
-                        console.log(`💫 窗口失焦 (${elapsed}ms)`);
-                        
-                        // 延迟显示弹窗
-                        setTimeout(() => {
-                            if (!document.hidden && !this.state.appOpened && !this.state.modalShown) {
-                                this.showModal();
-                            }
-                        }, 500);
-                    }
-                });
-                
-                // 窗口聚焦 - 用户可能取消了系统弹窗
-                window.addEventListener('focus', () => {
-                    if (this.state.modalShown && !this.state.appOpened) {
-                        console.log('🔙 用户返回页面');
-                    }
-                });
+                // 3. 监听失去焦点事件（参考示例代码逻辑）
+                this.setupFocusListeners();
             }
             
-            handleTimeout() {
-                if (this.state.appOpened || this.state.modalShown || this.state.userResponded) {
-                    console.log('超时但状态已确定，跳过');
-                    return;
+            setupFocusListeners() {
+                console.log('👂 设置焦点监听器');
+                
+                // 方法1：window.onblur（最简单直接）
+                window.onblur = () => {
+                    console.log('💫 window.onblur - 窗口失去焦点');
+                    this.state.pageLostFocus = true;
+                    
+                    // 延迟确认，避免误判
+                    setTimeout(() => {
+                        if (this.state.pageLostFocus && !this.state.appOpened && !this.state.modalShown) {
+                            console.log('✅ 确认应用唤起成功');
+                            this.showModal();
+                        }
+                    }, 300);
+                    
+                    this.updateDebugInfo();
+                };
+                
+                // 方法2：visibilitychange（备用检测）
+                const hiddenProperty = 'hidden' in document ? 'hidden' :
+                                    'webkitHidden' in document ? 'webkitHidden' :
+                                    'mozHidden' in document ? 'mozHidden' :
+                                    null;
+                
+                if (hiddenProperty) {
+                    const visibilityChangeEvent = hiddenProperty.replace(/hidden/i, 'visibilitychange');
+                    
+                    const onVisibilityChange = () => {
+                        if (document[hiddenProperty]) {
+                            console.log('👁️ visibilitychange - 页面隐藏');
+                            this.state.pageLostFocus = true;
+                            
+                            setTimeout(() => {
+                                if (this.state.pageLostFocus && !this.state.appOpened && !this.state.modalShown) {
+                                    console.log('✅ 确认应用唤起成功（页面隐藏）');
+                                    this.showModal();
+                                }
+                            }, 300);
+                            
+                            this.updateDebugInfo();
+                        }
+                    };
+                    
+                    document.addEventListener(visibilityChangeEvent, onVisibilityChange);
                 }
                 
-                const elapsed = Date.now() - this.state.startTime;
-                console.log(`⏰ 3秒超时 (${elapsed}ms)`);
-                this.state.phase = 'timeout';
-                
-                // 最终检查
-                if (document.hidden) {
-                    this.onAppOpened('timeout_check');
-                    return;
-                }
-                
-                // 应用未安装
-                this.onAppNotInstalled();
+                // 方法3：pagehide（终极检测）
+                window.addEventListener('pagehide', () => {
+                    console.log('📄 pagehide - 页面卸载');
+                    this.state.pageLostFocus = true;
+                    this.state.appOpened = true;
+                    this.updateDebugInfo();
+                });
             }
             
-            onAppOpened(source) {
-                if (this.state.appOpened) return;
-                
-                this.state.appOpened = true;
-                this.state.phase = 'success';
-                console.log(`🎉 应用已打开 (${source})`);
-                
-                this.clearTimers();
-                this.hideModal();
-                
-                this.elements.statusText.textContent = '应用已成功打开！';
-                this.elements.statusText.style.color = '#28a745';
-                this.elements.timerInfo.textContent = '正在切换到应用...';
-                this.updateDebugInfo();
-            }
-            
-            onAppNotInstalled() {
-                console.log('📦 应用未安装，跳转商店');
-                
-                this.clearTimers();
-                
-                this.elements.statusText.textContent = '应用未安装';
+            handleWeChatEnvironment() {
+                console.log('⚠️ 微信环境，无法直接唤起应用');
+                this.elements.statusText.textContent = '请在浏览器中打开此链接';
                 this.elements.statusText.style.color = '#dc3545';
-                this.elements.timerInfo.textContent = '正在跳转到应用商店...';
-                this.updateDebugInfo();
                 
+                // 3秒后跳转应用商店
                 setTimeout(() => {
-                    this.showStoreRedirect();
-                }, 500);
+                    this.goToPlayStore();
+                }, 3000);
             }
             
-            forceLaunchApp() {
-                console.log('💪 强制打开应用');
-                this.state.phase = 'launching';
-                
-                this.elements.statusText.textContent = '正在打开应用...';
-                this.elements.timerInfo.textContent = '请稍候...';
+            launchAppDirectly() {
+                console.log('💪 直接唤起应用');
+                this.state.userResponded = true;
                 
                 try {
                     const schemeUrl = this.buildSchemeUrl();
-                    window.location.href = schemeUrl;
+                    location.href = schemeUrl;
                     
-                    // 备用
+                    // 保险措施：如果1秒后还在当前页面，再次尝试
                     setTimeout(() => {
                         if (!this.state.appOpened) {
-                            window.location.href = schemeUrl;
+                            location.href = schemeUrl;
                         }
-                    }, 500);
+                    }, 1000);
                     
                 } catch (error) {
-                    console.log('强制打开失败:', error);
-                    this.redirectToStore();
+                    console.log('直接唤起失败:', error);
+                    this.goToPlayStore();
                 }
             }
             
-            showStoreRedirect() {
-                if (this.elements.fallback.style.display === 'block') {
-                    return;
-                }
+            goToPlayStore() {
+                console.log('🔗 跳转到应用商店');
+                this.state.userResponded = true;
                 
-                console.log('🛒 显示商店跳转');
-                
+                // 显示跳转界面
                 this.elements.loading.style.display = 'none';
                 this.elements.fallback.style.display = 'block';
                 
+                // 设置商店链接
                 this.elements.storeBtn.href = this.config.playStoreUrl;
                 this.elements.storeBtn.onclick = (e) => {
                     e.preventDefault();
-                    this.redirectToStore();
+                    location.href = this.config.playStoreUrl;
                 };
                 
                 // 自动跳转
                 setTimeout(() => {
-                    this.redirectToStore();
+                    location.href = this.config.playStoreUrl;
                 }, 1500);
             }
             
-            redirectToStore() {
-                console.log('🔗 跳转到应用商店');
-                window.location.href = this.config.playStoreUrl;
-            }
-            
             showNonAndroid() {
+                console.log('⚠️ 非Android设备');
                 this.elements.statusText.textContent = '此链接仅支持Android设备';
+                
                 setTimeout(() => {
-                    this.showStoreRedirect();
-                }, 1000);
+                    this.goToPlayStore();
+                }, 2000);
             }
         }
         
         // 页面加载完成后启动
         document.addEventListener('DOMContentLoaded', () => {
-            console.log('🚀 === 简化应用拉起方案 ===');
+            console.log('🚀 === 直接唤起方案 ===');
             console.log('配置:', CONFIG);
             
-            const launcher = new SimpleAppLauncher(CONFIG);
+            const launcher = new DirectAppLauncher(CONFIG);
             
             // 延迟启动
             setTimeout(() => {

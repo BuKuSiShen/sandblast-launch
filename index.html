@@ -301,10 +301,11 @@
     </div>
 
     <div class="debug" id="debugPanel" style="display: none;">
+        <div>环境: <span id="debugEnv">检测中...</span></div>
         <div>状态: <span id="debugState">-</span></div>
         <div>时间: <span id="debugTime">0</span>ms</div>
-        <div>阶段: <span id="debugPhase">-</span></div>
-        <div>检测类型: <span id="debugDetection">-</span></div>
+        <div>检测结果: <span id="debugDetection">-</span></div>
+        <div>弹窗状态: <span id="debugModal">-</span></div>
     </div>
 
     <script>
@@ -313,30 +314,37 @@
             packageName: 'com.neweraky.sandblast',
             urlScheme: 'neweraky.sandblast',
             playStoreUrl: 'https://play.google.com/store/apps/details?id=com.agedstudio.puzzle.sand.blocks.color.blast',
-            timeout: 3000, // 3秒超时
+            timeout: 3500, // 3.5秒超时
             debug: true
         };
         // =================================================
 
-        class AppLauncher {
+        class SmartAppLauncher {
             constructor(config) {
                 this.config = config;
-                this.isAndroid = /Android/i.test(navigator.userAgent);
-                
-                // 简化的状态管理
                 this.state = {
                     phase: 'init',
                     appOpened: false,
                     startTime: null,
-                    timer: null,
+                    mainTimer: null,
+                    fallbackTimer: null,
                     countdownInterval: null,
                     modalShown: false,
                     userResponded: false,
                     
-                    // 关键：更严格的检测标志
-                    appConfirmedInstalled: false,  // 确认应用已安装
-                    systemDialogConfirmed: false,  // 确认系统弹窗出现
-                    detectionAttempted: false      // 是否已尝试检测
+                    // 环境检测
+                    isInAppBrowser: false,
+                    isLark: false,
+                    isWeChat: false,
+                    
+                    // 双重检测机制
+                    detectionPhase1: false,  // 第一阶段检测
+                    detectionPhase2: false,  // 第二阶段检测
+                    confirmedInstalled: false,
+                    
+                    // 用户交互记录
+                    userActions: [],
+                    blurCount: 0
                 };
                 
                 this.elements = {
@@ -350,20 +358,22 @@
                     modalCancel: document.getElementById('modalCancel'),
                     modalOpen: document.getElementById('modalOpen'),
                     debugPanel: document.getElementById('debugPanel'),
+                    debugEnv: document.getElementById('debugEnv'),
                     debugState: document.getElementById('debugState'),
                     debugTime: document.getElementById('debugTime'),
-                    debugPhase: document.getElementById('debugPhase'),
-                    debugDetection: document.getElementById('debugDetection')
+                    debugDetection: document.getElementById('debugDetection'),
+                    debugModal: document.getElementById('debugModal')
                 };
                 
                 if (this.config.debug) {
                     this.elements.debugPanel.style.display = 'block';
                 }
                 
-                this.log('初始化完成');
+                // 检测环境
+                this.detectEnvironment();
+                this.log('🚀 智能启动器初始化完成');
                 this.updateDebugInfo();
                 
-                // 绑定弹窗事件
                 this.bindModalEvents();
             }
             
@@ -374,72 +384,113 @@
             }
             
             updateDebugInfo() {
-                this.elements.debugState.textContent = this.state.appOpened ? '已打开' : '未打开';
+                this.elements.debugEnv.textContent = this.getEnvDescription();
+                this.elements.debugState.textContent = this.state.phase;
                 this.elements.debugTime.textContent = this.state.startTime ? Date.now() - this.state.startTime : 0;
-                this.elements.debugPhase.textContent = this.state.phase;
-                this.elements.debugDetection.textContent = this.state.appConfirmedInstalled ? '已确认安装' : '未确认';
+                this.elements.debugDetection.textContent = this.state.confirmedInstalled ? '已安装' : '未知';
+                this.elements.debugModal.textContent = this.state.modalShown ? '已显示' : '隐藏';
             }
             
-            // 绑定弹窗事件
+            getEnvDescription() {
+                if (this.state.isLark) return 'Lark';
+                if (this.state.isWeChat) return 'WeChat';
+                if (this.state.isInAppBrowser) return '内置浏览器';
+                return '系统浏览器';
+            }
+            
+            detectEnvironment() {
+                const ua = navigator.userAgent;
+                this.state.isLark = /Lark/i.test(ua);
+                this.state.isWeChat = /MicroMessenger/i.test(ua);
+                this.state.isInAppBrowser = this.state.isLark || this.state.isWeChat || 
+                                          /FBAN|FBAV/i.test(ua) || /Twitter/i.test(ua);
+                
+                this.log(`🌍 环境检测: ${this.getEnvDescription()}`);
+                this.log(`UserAgent: ${ua.substring(0, 100)}...`);
+            }
+            
             bindModalEvents() {
                 this.elements.modalOpen.onclick = () => {
+                    this.recordAction('modal_open_click');
                     this.log('用户点击"打开应用"');
                     this.state.userResponded = true;
                     this.hideModal();
-                    this.launchApp();
+                    this.forceLaunchApp();
                 };
                 
                 this.elements.modalCancel.onclick = () => {
+                    this.recordAction('modal_cancel_click');
                     this.log('用户点击"取消"');
                     this.state.userResponded = true;
                     this.hideModal();
                     this.onUserCancelled();
                 };
+                
+                // 点击遮罩层也可以关闭
+                this.elements.modalOverlay.onclick = (e) => {
+                    if (e.target === this.elements.modalOverlay) {
+                        this.recordAction('modal_overlay_click');
+                        this.log('用户点击遮罩层');
+                        this.state.userResponded = true;
+                        this.hideModal();
+                        this.onUserCancelled();
+                    }
+                };
             }
             
-            // 显示弹窗 - 只在确认应用已安装时调用
+            recordAction(action) {
+                this.state.userActions.push({
+                    action,
+                    time: Date.now(),
+                    phase: this.state.phase
+                });
+                this.log(`📝 记录用户动作: ${action}`);
+            }
+            
             showModal() {
-                if (this.state.modalShown || this.state.appOpened || !this.state.appConfirmedInstalled) {
+                if (this.state.modalShown || this.state.appOpened || this.state.userResponded) {
                     return;
                 }
                 
-                this.log('显示自定义弹窗');
+                this.log('🪟 显示自定义弹窗');
                 this.state.modalShown = true;
                 this.state.phase = 'modal';
                 this.elements.modalOverlay.style.display = 'flex';
                 
-                // 清理超时
-                this.clearInitialTimeout();
+                // 停止所有计时器
+                this.clearAllTimers();
                 
                 // 更新UI
                 this.elements.statusText.textContent = '检测到本地应用';
                 this.elements.statusText.style.color = '#28a745';
+                this.elements.countdown.textContent = '∞';
                 this.elements.timerInfo.textContent = '请选择操作...';
                 this.updateDebugInfo();
             }
             
-            // 隐藏弹窗
             hideModal() {
-                this.log('隐藏弹窗');
-                this.elements.modalOverlay.style.display = 'none';
+                if (this.state.modalShown) {
+                    this.log('🪟 隐藏弹窗');
+                    this.elements.modalOverlay.style.display = 'none';
+                    this.state.modalShown = false;
+                }
             }
             
-            // 清理初始超时
-            clearInitialTimeout() {
-                if (this.state.timer) {
-                    clearTimeout(this.state.timer);
-                    this.state.timer = null;
+            clearAllTimers() {
+                if (this.state.mainTimer) {
+                    clearTimeout(this.state.mainTimer);
+                    this.state.mainTimer = null;
+                }
+                if (this.state.fallbackTimer) {
+                    clearTimeout(this.state.fallbackTimer);
+                    this.state.fallbackTimer = null;
                 }
                 if (this.state.countdownInterval) {
                     clearInterval(this.state.countdownInterval);
                     this.state.countdownInterval = null;
                 }
-                
-                this.elements.countdown.textContent = '∞';
-                this.elements.timerInfo.textContent = '等待用户选择...';
             }
             
-            // 构建Scheme URL
             buildSchemeUrl() {
                 const params = new URLSearchParams(window.location.search);
                 const ref = params.get('ref');
@@ -449,36 +500,34 @@
                     : `${this.config.urlScheme}://launch`;
             }
             
-            // 开始流程
             start() {
-                if (!this.isAndroid) {
-                    this.showNonAndroid();
+                // 环境特定的处理
+                if (this.state.isLark || this.state.isWeChat) {
+                    this.handleInAppBrowser();
                     return;
                 }
                 
-                this.log('开始检测流程');
+                this.log('🔍 开始通用检测流程');
                 this.state.phase = 'checking';
                 this.state.startTime = Date.now();
-                this.state.detectionAttempted = true;
                 
                 // 开始倒计时
                 this.startCountdown();
                 
-                // 设置3秒超时
-                this.state.timer = setTimeout(() => {
-                    this.handleInitialTimeout();
+                // 设置主超时
+                this.state.mainTimer = setTimeout(() => {
+                    this.handleMainTimeout();
                 }, this.config.timeout);
                 
-                // 使用更可靠的检测方法
-                this.performReliableDetection();
+                // 执行智能检测
+                this.performSmartDetection();
                 
-                // 设置监听器
-                this.setupListeners();
+                // 设置高级监听器
+                this.setupAdvancedListeners();
                 
                 this.updateDebugInfo();
             }
             
-            // 开始倒计时
             startCountdown() {
                 this.state.countdownInterval = setInterval(() => {
                     const elapsed = Date.now() - this.state.startTime;
@@ -494,112 +543,226 @@
                 }, 100);
             }
             
-            // 执行可靠的检测
-            performReliableDetection() {
-                this.log('执行可靠检测');
+            handleInAppBrowser() {
+                this.log('📱 在Lark/微信环境中，使用特殊策略');
+                this.elements.statusText.textContent = '正在启动应用...';
                 
-                // 方法1：直接尝试打开（如果应用存在，会显示系统弹窗或直接打开）
-                setTimeout(() => {
-                    try {
-                        const schemeUrl = this.buildSchemeUrl();
-                        this.log(`尝试打开: ${schemeUrl}`);
-                        
-                        // 使用iframe避免页面跳转
-                        const iframe = document.createElement('iframe');
-                        iframe.style.cssText = 'display:none;width:0;height:0;border:none;';
-                        iframe.src = schemeUrl;
-                        document.body.appendChild(iframe);
-                        
-                        // 3秒后移除iframe
-                        setTimeout(() => {
-                            if (iframe.parentNode) {
-                                iframe.parentNode.removeChild(iframe);
-                            }
-                        }, 3000);
-                        
-                    } catch (error) {
-                        this.log(`检测失败: ${error}`);
-                    }
-                }, 100);
+                // 企业应用中直接尝试打开
+                this.attemptDirectLaunch();
+                
+                // 设置更短的超时
+                this.state.mainTimer = setTimeout(() => {
+                    this.onAppNotInstalledInAppBrowser();
+                }, 2000);
             }
             
-            // 设置监听器
-            setupListeners() {
-                this.log('设置监听器');
+            performSmartDetection() {
+                this.log('🎯 执行智能检测');
                 
-                // 1. 页面隐藏监听 - 应用已打开
+                // 第一阶段：立即尝试（快速检测）
+                this.detectionPhase1();
+                
+                // 第二阶段：延迟尝试（备用检测）
+                setTimeout(() => {
+                    if (!this.state.detectionPhase1 && !this.state.appOpened) {
+                        this.detectionPhase2();
+                    }
+                }, 800);
+                
+                // 第三阶段：终极检测
+                setTimeout(() => {
+                    if (!this.state.detectionPhase1 && !this.state.detectionPhase2 && !this.state.appOpened) {
+                        this.detectionPhase3();
+                    }
+                }, 1500);
+            }
+            
+            detectionPhase1() {
+                this.log('🔧 第一阶段检测：直接Scheme');
+                this.state.detectionPhase1 = true;
+                
+                try {
+                    const schemeUrl = this.buildSchemeUrl();
+                    
+                    // 创建隐藏iframe尝试打开
+                    const iframe = document.createElement('iframe');
+                    iframe.style.cssText = 'display:none;width:0;height:0;border:none;opacity:0;';
+                    iframe.src = schemeUrl;
+                    document.body.appendChild(iframe);
+                    
+                    // 记录iframe状态
+                    this.state.iframeElement = iframe;
+                    
+                    // 5秒后清理iframe
+                    setTimeout(() => {
+                        if (iframe.parentNode) {
+                            iframe.parentNode.removeChild(iframe);
+                        }
+                    }, 5000);
+                    
+                } catch (error) {
+                    this.log(`第一阶段检测失败: ${error}`);
+                }
+            }
+            
+            detectionPhase2() {
+                this.log('🔧 第二阶段检测：Intent方式');
+                this.state.detectionPhase2 = true;
+                
+                try {
+                    // 使用Intent语法（Android专用）
+                    const intentUrl = `intent://launch/#Intent;` +
+                                    `scheme=${this.config.urlScheme};` +
+                                    `package=${this.config.packageName};` +
+                                    `S.browser_fallback_url=${encodeURIComponent(this.config.playStoreUrl)};` +
+                                    `end`;
+                    
+                    // 创建第二个iframe
+                    const iframe2 = document.createElement('iframe');
+                    iframe2.style.cssText = 'display:none;width:0;height:0;border:none;opacity:0;';
+                    iframe2.src = intentUrl;
+                    document.body.appendChild(iframe2);
+                    
+                    setTimeout(() => {
+                        if (iframe2.parentNode) {
+                            iframe2.parentNode.removeChild(iframe2);
+                        }
+                    }, 3000);
+                    
+                } catch (error) {
+                    this.log(`第二阶段检测失败: ${error}`);
+                }
+            }
+            
+            detectionPhase3() {
+                this.log('🔧 第三阶段检测：用户交互模拟');
+                
+                // 尝试通过模拟点击的方式
+                setTimeout(() => {
+                    if (!this.state.appOpened && !this.state.confirmedInstalled) {
+                        this.checkForSystemDialog();
+                    }
+                }, 500);
+            }
+            
+            setupAdvancedListeners() {
+                this.log('👂 设置高级监听器');
+                
+                // 1. 页面可见性 - 最可靠的检测
+                let visibilityTimeout;
                 document.addEventListener('visibilitychange', () => {
+                    clearTimeout(visibilityTimeout);
+                    
                     if (document.hidden && !this.state.appOpened) {
                         const elapsed = Date.now() - this.state.startTime;
-                        this.log(`页面隐藏 (${elapsed}ms)`);
+                        this.log(`👁️ 页面隐藏 (${elapsed}ms)`);
                         
-                        // 延迟确认，避免误判
-                        setTimeout(() => {
-                            if (document.hidden && elapsed > 300) {
-                                this.onAppOpened('页面隐藏');
-                            }
-                        }, 200);
-                    }
-                });
-                
-                // 2. 窗口失焦监听 - 系统弹窗出现
-                let blurTimeout;
-                window.addEventListener('blur', () => {
-                    if (!document.hidden && !this.state.appOpened && !this.state.systemDialogConfirmed) {
-                        clearTimeout(blurTimeout);
-                        
-                        blurTimeout = setTimeout(() => {
-                            if (!document.hidden && !this.state.appOpened) {
-                                this.log('检测到可能的系统弹窗');
-                                this.onSystemDialogDetected();
-                            }
-                        }, 500); // 500ms延迟确认
-                    }
-                });
-                
-                // 3. 页面点击监听 - 用户可能点击了系统弹窗
-                document.addEventListener('click', () => {
-                    if (this.state.systemDialogConfirmed && !this.state.appOpened) {
-                        // 用户可能点击了系统弹窗
-                        setTimeout(() => {
-                            if (document.hidden) {
-                                this.onAppOpened('系统弹窗点击');
+                        visibilityTimeout = setTimeout(() => {
+                            if (document.hidden && elapsed > 200) {
+                                this.onAppOpened('visibility_change');
                             }
                         }, 300);
                     }
                 });
+                
+                // 2. 窗口失焦 - 系统弹窗检测
+                let blurTimer;
+                window.addEventListener('blur', () => {
+                    this.state.blurCount++;
+                    const elapsed = Date.now() - this.state.startTime;
+                    
+                    clearTimeout(blurTimer);
+                    
+                    if (!document.hidden && !this.state.appOpened && elapsed > 300) {
+                        this.log(`💫 窗口失焦 (第${this.state.blurCount}次, ${elapsed}ms)`);
+                        
+                        // 失焦后延迟检查
+                        blurTimer = setTimeout(() => {
+                            if (!document.hidden && !this.state.appOpened) {
+                                this.onSystemDialogDetected();
+                            }
+                        }, 600);
+                    }
+                });
+                
+                // 3. 窗口聚焦 - 用户返回
+                window.addEventListener('focus', () => {
+                    if (this.state.confirmedInstalled && !this.state.appOpened && !this.state.modalShown) {
+                        this.log('🔙 用户返回，可能取消了系统弹窗');
+                        // 显示我们的自定义弹窗
+                        setTimeout(() => {
+                            if (!this.state.appOpened && !this.state.modalShown) {
+                                this.showModal();
+                            }
+                        }, 300);
+                    }
+                });
+                
+                // 4. 页面点击 - 用户可能在页面上点击
+                let clickTimer;
+                document.addEventListener('click', () => {
+                    clearTimeout(clickTimer);
+                    
+                    if (this.state.confirmedInstalled && !this.state.appOpened && !this.state.modalShown) {
+                        clickTimer = setTimeout(() => {
+                            if (!this.state.appOpened && !this.state.modalShown) {
+                                this.showModal();
+                            }
+                        }, 200);
+                    }
+                });
             }
             
-            // 检测到系统弹窗 - 确认应用已安装
             onSystemDialogDetected() {
-                if (this.state.systemDialogConfirmed || this.state.appOpened || this.state.userResponded) {
+                if (this.state.confirmedInstalled || this.state.appOpened || this.state.userResponded) {
                     return;
                 }
                 
-                this.state.systemDialogConfirmed = true;
-                this.state.appConfirmedInstalled = true;
-                this.log('✅ 确认应用已安装（系统弹窗出现）');
+                this.state.confirmedInstalled = true;
+                this.log('✅ 检测到系统弹窗，确认应用已安装');
                 
-                // 立即显示我们的弹窗
-                this.showModal();
+                // 延迟显示我们的弹窗
+                setTimeout(() => {
+                    if (!this.state.appOpened && !this.state.userResponded) {
+                        this.showModal();
+                    }
+                }, 800);
+                
                 this.updateDebugInfo();
             }
             
-            // 用户取消
-            onUserCancelled() {
-                this.log('用户取消打开应用');
-                this.state.phase = 'cancelled';
-                
-                setTimeout(() => {
-                    this.showStoreRedirect();
-                }, 300);
+            checkForSystemDialog() {
+                // 通过模拟事件检查
+                if (!this.state.appOpened && !this.state.confirmedInstalled) {
+                    // 如果页面仍然可见且没有失焦记录，可能没有系统弹窗
+                    if (this.state.blurCount === 0 && !document.hidden) {
+                        this.log('🔍 未检测到系统弹窗迹象');
+                    }
+                }
             }
             
-            // 拉起应用
-            launchApp() {
-                if (this.state.appOpened) return;
+            attemptDirectLaunch() {
+                try {
+                    const schemeUrl = this.buildSchemeUrl();
+                    this.log(`🚀 尝试直接打开: ${schemeUrl}`);
+                    window.location.href = schemeUrl;
+                } catch (error) {
+                    this.log(`直接打开失败: ${error}`);
+                }
+            }
+            
+            onAppNotInstalledInAppBrowser() {
+                this.log('📱 在企业应用中未检测到应用');
+                this.elements.statusText.textContent = '正在跳转应用商店...';
                 
-                this.log('执行应用拉起');
+                // 在企业应用中，显示提示并跳转
+                setTimeout(() => {
+                    this.showStoreRedirect();
+                }, 1000);
+            }
+            
+            forceLaunchApp() {
+                this.log('💪 强制拉起应用');
                 this.state.phase = 'launching';
                 
                 this.elements.statusText.textContent = '正在打开应用...';
@@ -617,20 +780,38 @@
                     }, 500);
                     
                 } catch (error) {
-                    this.log(`拉起失败: ${error}`);
+                    this.log(`强制拉起失败: ${error}`);
                     this.showStoreRedirect();
                 }
             }
             
-            // 应用已打开
+            handleMainTimeout() {
+                if (this.state.appOpened || this.state.confirmedInstalled || this.state.userResponded) {
+                    this.log('⏰ 超时但状态已确定，跳过');
+                    return;
+                }
+                
+                const elapsed = Date.now() - this.state.startTime;
+                this.log(`⏰ ${this.config.timeout}ms超时 (${elapsed}ms)`);
+                
+                // 最终检查
+                if (document.hidden) {
+                    this.onAppOpened('timeout_check');
+                    return;
+                }
+                
+                // 应用未安装
+                this.onAppNotInstalled();
+            }
+            
             onAppOpened(source) {
                 if (this.state.appOpened) return;
                 
                 this.state.appOpened = true;
                 this.state.phase = 'success';
-                this.log(`🎉 应用已打开 (${source})`);
+                this.log(`🎉 应用已成功打开 (${source})`);
                 
-                this.clearInitialTimeout();
+                this.clearAllTimers();
                 this.hideModal();
                 
                 this.elements.statusText.textContent = '应用已成功打开！';
@@ -639,33 +820,11 @@
                 this.updateDebugInfo();
             }
             
-            // 处理初始超时（3秒）
-            handleInitialTimeout() {
-                // 如果已确定状态，跳过
-                if (this.state.appOpened || this.state.appConfirmedInstalled || this.state.userResponded) {
-                    this.log('超时但状态已确定，跳过');
-                    return;
-                }
-                
-                const elapsed = Date.now() - this.state.startTime;
-                this.log(`⏰ 3秒超时 (${elapsed}ms)`);
+            onAppNotInstalled() {
+                this.log('📦 应用未安装，跳转应用商店');
                 this.state.phase = 'timeout';
                 
-                // 最终检查页面状态
-                if (document.hidden) {
-                    this.log('最终检查：页面隐藏');
-                    this.onAppOpened('超时检查');
-                    return;
-                }
-                
-                // 应用未安装 - 直接跳转商店
-                this.onAppNotInstalled();
-            }
-            
-            // 应用未安装处理
-            onAppNotInstalled() {
-                this.log('应用未安装，跳转应用商店');
-                clearInterval(this.state.countdownInterval);
+                this.clearAllTimers();
                 
                 this.elements.statusText.textContent = '应用未安装';
                 this.elements.statusText.style.color = '#dc3545';
@@ -675,17 +834,24 @@
                 // 延迟跳转，让用户看到状态
                 setTimeout(() => {
                     this.showStoreRedirect();
+                }, 800);
+            }
+            
+            onUserCancelled() {
+                this.log('❌ 用户取消');
+                this.state.phase = 'cancelled';
+                
+                setTimeout(() => {
+                    this.showStoreRedirect();
                 }, 500);
             }
             
-            // 显示商店跳转
             showStoreRedirect() {
-                // 确保不会重复显示
                 if (this.elements.fallback.style.display === 'block') {
                     return;
                 }
                 
-                this.log('显示应用商店跳转');
+                this.log('🛒 显示应用商店跳转');
                 
                 this.elements.loading.style.display = 'none';
                 this.elements.fallback.style.display = 'block';
@@ -693,42 +859,34 @@
                 this.elements.storeBtn.href = this.config.playStoreUrl;
                 this.elements.storeBtn.onclick = (e) => {
                     e.preventDefault();
+                    this.recordAction('store_button_click');
                     this.goToPlayStore();
                 };
                 
                 // 自动跳转
-                setTimeout(() => {
+                this.state.fallbackTimer = setTimeout(() => {
                     this.goToPlayStore();
-                }, 1500);
+                }, 2000);
             }
             
-            // 跳转到应用商店
             goToPlayStore() {
-                this.log('跳转到应用商店');
+                this.log('🔗 跳转到应用商店');
                 window.location.href = this.config.playStoreUrl;
-            }
-            
-            // 非Android处理
-            showNonAndroid() {
-                this.elements.statusText.textContent = '此链接仅支持Android设备';
-                setTimeout(() => {
-                    this.showStoreRedirect();
-                }, 1000);
             }
         }
         
         // 页面加载完成后启动
         document.addEventListener('DOMContentLoaded', () => {
-            console.log('=== 优化版拉起方案 ===');
-            console.log('URL Scheme:', CONFIG.urlScheme);
-            console.log('包名:', CONFIG.packageName);
+            console.log('🚀 === 智能自适应拉起方案 ===');
+            console.log('📱 URL Scheme:', CONFIG.urlScheme);
+            console.log('📦 包名:', CONFIG.packageName);
             
-            const launcher = new AppLauncher(CONFIG);
+            const launcher = new SmartAppLauncher(CONFIG);
             
             // 延迟启动
             setTimeout(() => {
                 launcher.start();
-            }, 500);
+            }, 800);
             
             // 暴露给调试
             window.launcher = launcher;
